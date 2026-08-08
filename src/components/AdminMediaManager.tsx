@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  supabaseGetMediaFiles, 
-  supabaseSaveMediaRecord, 
-  supabaseDeleteMediaRecord, 
+import {
+  supabaseGetMediaFiles,
+  supabaseSaveMediaRecord,
   supabaseUploadMediaStorageAsset,
-  MediaFileRecord 
+  MediaFileRecord
 } from '../lib/supabase';
 import { 
   UploadCloud, Image as ImageIcon, Video, Instagram, Youtube, 
