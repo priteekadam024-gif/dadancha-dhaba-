@@ -268,40 +268,92 @@ export const AdminMediaManager: React.FC = () => {
   };
 
   // Upload Website Video Handler
+  // IMPORTANT: Admin videos MUST go through the secure Render backend.
+  // Do not upload directly from the browser to Supabase Storage or media_files.
   const handleUploadVideoFile = async () => {
     if (!uploadedFile) {
       showToast('Please select a video file (MP4, WEBM, MOV).', 'error');
       return;
     }
 
+    if (!uploadedFile.type.startsWith('video/')) {
+      showToast('Please select a valid video file.', 'error');
+      return;
+    }
+
     setIsUploading(true);
+
     try {
-      const uploadResult = await supabaseUploadMediaStorageAsset(uploadedFile, 'website-videos', 'uploaded');
+      const adminToken =
+        sessionStorage.getItem('adminAuthToken') ||
+        localStorage.getItem('adminAuthToken');
 
-      if (uploadResult?.publicUrl) {
-        const newRecord: MediaFileRecord = {
-          file_name: uploadedFile.name,
-          storage_path: uploadResult.storagePath,
-          public_url: uploadResult.publicUrl,
-          media_type: 'video',
-          mime_type: uploadedFile.type,
-          file_size: uploadedFile.size,
-          title: fileTitle || uploadedFile.name,
-          description: fileDescription,
-          source_type: 'upload',
-          uploaded_by: 'Admin',
-          is_active: true,
-        };
-
-        await supabaseSaveMediaRecord(newRecord);
-        showToast('Video file uploaded to Supabase Storage successfully!', 'success');
-        setUploadedFile(null);
-        setPreviewUrl(null);
-        fetchMediaFromSupabase();
+      if (!adminToken) {
+        throw new Error('Admin session not found. Please log in again.');
       }
-    } catch (err) {
-      console.error(err);
-      showToast('Error uploading video file', 'error');
+
+      // Vercel hosts the frontend; Render hosts the Express backend.
+      const apiBaseUrl =
+        (import.meta.env.VITE_API_BASE_URL ||
+          'https://dadancha-dhaba-backend.onrender.com').replace(/\/$/, '');
+
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      formData.append('titleEn', fileTitle || uploadedFile.name.replace(/\.[^/.]+$/, ''));
+      formData.append('titleMr', '');
+      formData.append('descriptionEn', fileDescription || '');
+      formData.append('descriptionMr', '');
+      formData.append('category', 'reels');
+      formData.append('mediaType', 'video');
+
+      const response = await fetch(
+        `${apiBaseUrl}/api/admin/media/upload`,
+        {
+          method: 'POST',
+          headers: {
+            'x-admin-token': adminToken,
+          },
+          body: formData,
+        }
+      );
+
+      let result: any = null;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
+      }
+
+      if (!response.ok || !result?.success) {
+        const message =
+          result?.error ||
+          result?.message ||
+          `Upload failed with HTTP ${response.status}`;
+
+        throw new Error(message);
+      }
+
+      // Success is shown ONLY after Render confirms that both
+      // Supabase Storage upload and media_files INSERT succeeded.
+      showToast(
+        'Video uploaded and saved to Supabase successfully!',
+        'success'
+      );
+
+      setUploadedFile(null);
+      setFileTitle('');
+      setFileDescription('');
+      setPreviewUrl(null);
+
+      await fetchMediaFromSupabase();
+    } catch (err: any) {
+      console.error('Admin video upload failed:', err);
+
+      const message =
+        err?.message ||
+        'Error uploading video file';
+
+      showToast(`Upload failed: ${message}`, 'error');
     } finally {
       setIsUploading(false);
     }
