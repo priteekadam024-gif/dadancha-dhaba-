@@ -3,6 +3,7 @@ import path from 'path';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const storage = multer.memoryStorage();
 const upload = multer({
