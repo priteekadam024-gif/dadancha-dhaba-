@@ -1,0 +1,6 @@
+{
+  "name": "Dadacha Dhaba",
+  "description": "दादाचा ढाबा - Premium Authentic Maharashtrian Dhaba Spices, Utensils & Food Products Ecommerce",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
