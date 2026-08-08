@@ -29,7 +29,8 @@ export const OfficialLogo: React.FC<OfficialLogoProps> = ({
   const currentLang = lang || contextLang;
 
   // Global single source of truth logo asset path
-  const logoSrc = customLogoUrl || getEffectiveLogo(purpose);
+  const OFFICIAL_LOGO_FALLBACK = '/assets/dadacha-dhaba-logo.png';
+  const logoSrc = customLogoUrl || getEffectiveLogo(purpose) || OFFICIAL_LOGO_FALLBACK;
 
   const badgeSizes = {
     sm: 'w-8 h-8',
@@ -57,8 +58,9 @@ export const OfficialLogo: React.FC<OfficialLogoProps> = ({
         referrerPolicy="no-referrer"
         onError={(e) => {
           const target = e.currentTarget;
-          if (target.src !== window.location.origin + '/assets/dadacha-dhaba-logo.png') {
-            target.src = '/assets/dadacha-dhaba-logo.png';
+          if (!target.dataset.fallbackApplied) {
+            target.dataset.fallbackApplied = 'true';
+            target.src = OFFICIAL_LOGO_FALLBACK;
           }
         }}
         className="w-full h-full object-cover rounded-full"
