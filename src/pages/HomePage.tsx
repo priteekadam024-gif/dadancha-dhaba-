@@ -133,7 +133,11 @@ export const HomePage: React.FC = () => {
                   alt="Dadacha Dhaba Brand"
                   className="w-full h-full object-contain"
                   onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
+                    const target = e.currentTarget;
+                    if (!target.dataset.fallbackApplied) {
+                      target.dataset.fallbackApplied = 'true';
+                      target.src = '/assets/dadacha-dhaba-logo.png';
+                    }
                   }}
                 />
                 <Utensils className="w-12 h-12 text-[#F4B400] mx-auto my-3" />
