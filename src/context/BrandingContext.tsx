@@ -73,6 +73,15 @@ interface BrandingContextType {
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'dadacha_dhaba_branding_v2';
+const OFFICIAL_LOGO_FALLBACK = '/assets/dadacha-dhaba-logo.png';
+
+function isUsableLogoUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function normalizeLogoUrl(value: unknown): string {
+  return isUsableLogoUrl(value) ? value.trim() : OFFICIAL_LOGO_FALLBACK;
+}
 
 /**
  * Dynamically updates document favicon links with cache buster query string
@@ -107,7 +116,12 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        return { ...DEFAULT_BRANDING, ...parsed };
+        return {
+          ...DEFAULT_BRANDING,
+          ...parsed,
+          logoUrl: normalizeLogoUrl(parsed.logoUrl),
+          faviconUrl: normalizeLogoUrl(parsed.faviconUrl || parsed.logoUrl),
+        };
       }
     } catch (e) {
       console.warn('Failed reading cached branding from localStorage:', e);
@@ -133,9 +147,9 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const remoteData = await supabaseGetSiteSettings();
         if (remoteData && isMounted) {
           const merged: BrandingSettings = {
-            logoUrl: remoteData.logo_url || DEFAULT_BRANDING.logoUrl,
+            logoUrl: normalizeLogoUrl(remoteData.logo_url),
             logoStoragePath: remoteData.logo_storage_path,
-            faviconUrl: remoteData.favicon_url || remoteData.logo_url || DEFAULT_BRANDING.faviconUrl,
+            faviconUrl: normalizeLogoUrl(remoteData.favicon_url || remoteData.logo_url),
             faviconStoragePath: remoteData.favicon_storage_path,
             siteName: remoteData.site_name || DEFAULT_BRANDING.siteName,
             taglineMr: remoteData.tagline_mr || DEFAULT_BRANDING.taglineMr,
@@ -171,22 +185,38 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const getEffectiveLogo = (purpose?: 'main' | 'login' | 'admin' | 'invoice' | 'footer' | 'header'): string => {
     if (!purpose || purpose === 'main' || purpose === 'footer' || purpose === 'header') {
-      return branding.logoUrl || DEFAULT_BRANDING.logoUrl;
+      return normalizeLogoUrl(branding.logoUrl);
     }
     if (purpose === 'login') {
-      return branding.useGlobalForLogin || !branding.loginLogoUrl ? branding.logoUrl : branding.loginLogoUrl;
+      return normalizeLogoUrl(
+        branding.useGlobalForLogin || !branding.loginLogoUrl
+          ? branding.logoUrl
+          : branding.loginLogoUrl
+      );
     }
     if (purpose === 'admin') {
-      return branding.useGlobalForAdmin || !branding.adminLogoUrl ? branding.logoUrl : branding.adminLogoUrl;
+      return normalizeLogoUrl(
+        branding.useGlobalForAdmin || !branding.adminLogoUrl
+          ? branding.logoUrl
+          : branding.adminLogoUrl
+      );
     }
     if (purpose === 'invoice') {
-      return branding.useGlobalForInvoice || !branding.invoiceLogoUrl ? branding.logoUrl : branding.invoiceLogoUrl;
+      return normalizeLogoUrl(
+        branding.useGlobalForInvoice || !branding.invoiceLogoUrl
+          ? branding.logoUrl
+          : branding.invoiceLogoUrl
+      );
     }
-    return branding.logoUrl || DEFAULT_BRANDING.logoUrl;
+    return normalizeLogoUrl(branding.logoUrl);
   };
 
   const getEffectiveFavicon = (): string => {
-    return (branding.useGlobalForFavicon || !branding.faviconUrl) ? branding.logoUrl : branding.faviconUrl;
+    return normalizeLogoUrl(
+      branding.useGlobalForFavicon || !branding.faviconUrl
+        ? branding.logoUrl
+        : branding.faviconUrl
+    );
   };
 
   const uploadAssetFile = async (file: File, folder: string = 'branding'): Promise<string> => {
