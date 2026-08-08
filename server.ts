@@ -18,15 +18,21 @@ const ADMIN_SECRET =
   process.env.ADMIN_SECRET;
 
 if (!SUPABASE_URL) {
-  throw new Error('SUPABASE_URL or VITE_SUPABASE_URL is not configured');
+  throw new Error(
+    'SUPABASE_URL or VITE_SUPABASE_URL is not configured'
+  );
 }
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+  throw new Error(
+    'SUPABASE_SERVICE_ROLE_KEY is not configured'
+  );
 }
 
 if (!ADMIN_SECRET) {
-  throw new Error('ADMIN_SECRET is not configured');
+  throw new Error(
+    'ADMIN_SECRET is not configured'
+  );
 }
 
 const supabase = createClient(
@@ -43,8 +49,6 @@ const upload = multer({
   }
 });
 
-// Active admin sessions.
-// These are intentionally kept server-side.
 const ADMIN_TOKENS = new Map<
   string,
   {
@@ -52,8 +56,6 @@ const ADMIN_TOKENS = new Map<
   }
 >();
 
-// In-memory fallback for temporary runtime use only.
-// Supabase remains the permanent source of truth.
 const inMemoryMediaFiles: any[] = [];
 
 const mockProducts: any[] = [
@@ -102,9 +104,6 @@ const mockOrders: any[] = [
 
 const mockCustomers: any[] = [];
 
-/**
- * Securely compare two strings.
- */
 function secureCompare(
   supplied: string,
   expected: string
@@ -112,7 +111,10 @@ function secureCompare(
   const suppliedBuffer = Buffer.from(supplied);
   const expectedBuffer = Buffer.from(expected);
 
-  if (suppliedBuffer.length !== expectedBuffer.length) {
+  if (
+    suppliedBuffer.length !==
+    expectedBuffer.length
+  ) {
     return false;
   }
 
@@ -122,40 +124,38 @@ function secureCompare(
   );
 }
 
-/**
- * Generate a cryptographically secure admin session token.
- */
 function createAdminToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-/**
- * Extract admin token from request.
- */
 function getAdminToken(
   req: express.Request
 ): string {
-  const headerToken = req.headers['x-admin-token'];
+  const headerToken =
+    req.headers['x-admin-token'];
 
-  if (typeof headerToken === 'string' && headerToken.trim()) {
+  if (
+    typeof headerToken === 'string' &&
+    headerToken.trim()
+  ) {
     return headerToken.trim();
   }
 
-  const authorization = req.headers.authorization;
+  const authorization =
+    req.headers.authorization;
 
   if (
     typeof authorization === 'string' &&
     authorization.startsWith('Bearer ')
   ) {
-    return authorization.slice(7).trim();
+    return authorization
+      .slice(7)
+      .trim();
   }
 
   return '';
 }
 
-/**
- * Admin-only middleware.
- */
 function requireAdminAuth(
   req: express.Request,
   res: express.Response,
@@ -166,32 +166,36 @@ function requireAdminAuth(
   if (!token) {
     return res.status(403).json({
       success: false,
-      error: 'Unauthorized: Admin authorization token required.'
+      error:
+        'Unauthorized: Admin authorization token required.'
     });
   }
 
-  const session = ADMIN_TOKENS.get(token);
+  const session =
+    ADMIN_TOKENS.get(token);
 
   if (!session) {
     return res.status(403).json({
       success: false,
-      error: 'Invalid or expired admin session.'
+      error:
+        'Invalid or expired admin session.'
     });
   }
 
-  // 24-hour admin session.
   const SESSION_DURATION =
     24 * 60 * 60 * 1000;
 
   if (
-    Date.now() - session.createdAt >
+    Date.now() -
+      session.createdAt >
     SESSION_DURATION
   ) {
     ADMIN_TOKENS.delete(token);
 
     return res.status(403).json({
       success: false,
-      error: 'Admin session expired. Please log in again.'
+      error:
+        'Admin session expired. Please log in again.'
     });
   }
 
@@ -214,9 +218,6 @@ async function startServer() {
     })
   );
 
-  /**
-   * HEALTH CHECK
-   */
   app.get('/api/health', (_req, res) => {
     return res.status(200).json({
       status: 'ok',
@@ -224,73 +225,80 @@ async function startServer() {
     });
   });
 
-  /**
+  /*
    * ADMIN LOGIN
-   *
-   * Password is checked ONLY against
-   * Render's ADMIN_SECRET environment variable.
    */
-  app.post('/api/auth/login', (req, res) => {
-    try {
-      const { email, password } =
-        req.body || {};
+  app.post(
+    '/api/auth/login',
+    (req, res) => {
+      try {
+        const {
+          password
+        } = req.body || {};
 
-      const suppliedPassword =
-        typeof password === 'string'
-          ? password.trim()
-          : '';
+        const suppliedPassword =
+          typeof password === 'string'
+            ? password.trim()
+            : '';
 
-      if (!suppliedPassword) {
-        return res.status(400).json({
+        if (!suppliedPassword) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Admin password is required.'
+          });
+        }
+
+        if (
+          !secureCompare(
+            suppliedPassword,
+            ADMIN_SECRET
+          )
+        ) {
+          return res.status(401).json({
+            success: false,
+            message:
+              'Invalid admin password.'
+          });
+        }
+
+        const token =
+          createAdminToken();
+
+        ADMIN_TOKENS.set(token, {
+          createdAt: Date.now()
+        });
+
+        return res.status(200).json({
+          success: true,
+          role: 'admin',
+          token,
+          message:
+            'Admin Secret Login authenticated'
+        });
+      } catch (error: any) {
+        console.error(
+          'Admin login error:',
+          error
+        );
+
+        return res.status(500).json({
           success: false,
-          message: 'Admin password is required.'
+          message:
+            'Admin login failed.'
         });
       }
-
-      if (
-        !secureCompare(
-          suppliedPassword,
-          ADMIN_SECRET
-        )
-      ) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid admin password.'
-        });
-      }
-
-      const token = createAdminToken();
-
-      ADMIN_TOKENS.set(token, {
-        createdAt: Date.now()
-      });
-
-      return res.status(200).json({
-        success: true,
-        role: 'admin',
-        token,
-        message: 'Admin Secret Login authenticated'
-      });
-    } catch (error: any) {
-      console.error(
-        'Admin login error:',
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        message: 'Admin login failed.'
-      });
     }
-  });
+  );
 
-  /**
+  /*
    * ADMIN LOGOUT
    */
   app.post(
     '/api/auth/logout',
     (req, res) => {
-      const token = getAdminToken(req);
+      const token =
+        getAdminToken(req);
 
       if (token) {
         ADMIN_TOKENS.delete(token);
@@ -298,18 +306,14 @@ async function startServer() {
 
       return res.json({
         success: true,
-        message: 'Logged out successfully'
+        message:
+          'Logged out successfully'
       });
     }
   );
 
-  /**
+  /*
    * CUSTOMER REGISTER
-   *
-   * NOTE:
-   * This is kept compatible with your
-   * existing frontend. Real customer
-   * authentication should use Supabase Auth.
    */
   app.post(
     '/api/auth/register',
@@ -323,7 +327,9 @@ async function startServer() {
       return res.json({
         success: true,
         user: {
-          id: 'usr-' + Date.now(),
+          id:
+            'usr-' +
+            Date.now(),
           name,
           email,
           phone,
@@ -333,7 +339,7 @@ async function startServer() {
     }
   );
 
-  /**
+  /*
    * CUSTOMER PROFILE
    */
   app.get(
@@ -342,7 +348,8 @@ async function startServer() {
       return res.json({
         success: true,
         profile:
-          mockCustomers[0] || null
+          mockCustomers[0] ||
+          null
       });
     }
   );
@@ -359,12 +366,6 @@ async function startServer() {
     }
   );
 
-  /**
-   * Password reset placeholder.
-   *
-   * Real customer password resets
-   * should be handled by Supabase Auth.
-   */
   app.post(
     '/api/auth/password-reset',
     (_req, res) => {
@@ -376,11 +377,8 @@ async function startServer() {
     }
   );
 
-  /**
+  /*
    * PUBLIC MEDIA
-   *
-   * Customers can read media.
-   * They cannot write/delete media.
    */
   app.get(
     '/api/media',
@@ -392,9 +390,12 @@ async function startServer() {
         } = await supabase
           .from('media_files')
           .select('*')
-          .order('created_at', {
-            ascending: false
-          });
+          .order(
+            'created_at',
+            {
+              ascending: false
+            }
+          );
 
         if (error) {
           console.error(
@@ -411,7 +412,8 @@ async function startServer() {
 
         return res.json({
           success: true,
-          videos: data || []
+          videos:
+            data || []
         });
       } catch (error: any) {
         console.error(
@@ -428,11 +430,8 @@ async function startServer() {
     }
   );
 
-  /**
-   * ADMIN MEDIA UPLOAD
-   *
-   * Only authenticated admin sessions
-   * can reach this route.
+  /*
+   * ADMIN VIDEO / IMAGE UPLOAD
    */
   app.post(
     '/api/admin/media/upload',
@@ -465,9 +464,10 @@ async function startServer() {
             'video/'
           );
 
-        const bucket = isVideo
-          ? 'website-videos'
-          : 'website-images';
+        const bucket =
+          isVideo
+            ? 'website-videos'
+            : 'website-images';
 
         uploadedBucket = bucket;
 
@@ -476,7 +476,9 @@ async function startServer() {
             .split('.')
             .pop()
             ?.toLowerCase() ||
-          (isVideo ? 'mp4' : 'jpg');
+          (isVideo
+            ? 'mp4'
+            : 'jpg');
 
         const cleanName =
           file.originalname
@@ -492,23 +494,24 @@ async function startServer() {
         const storagePath =
           `reels/${Date.now()}_${cleanName}.${originalExtension}`;
 
-        /**
+        /*
          * Upload to Supabase Storage.
          */
         const {
           data: uploadData,
           error: uploadError
-        } = await supabase.storage
-          .from(bucket)
-          .upload(
-            storagePath,
-            file.buffer,
-            {
-              contentType:
-                file.mimetype,
-              upsert: false
-            }
-          );
+        } =
+          await supabase.storage
+            .from(bucket)
+            .upload(
+              storagePath,
+              file.buffer,
+              {
+                contentType:
+                  file.mimetype,
+                upsert: false
+              }
+            );
 
         if (
           uploadError ||
@@ -532,11 +535,12 @@ async function startServer() {
 
         const {
           data: publicUrlData
-        } = supabase.storage
-          .from(bucket)
-          .getPublicUrl(
-            uploadData.path
-          );
+        } =
+          supabase.storage
+            .from(bucket)
+            .getPublicUrl(
+              uploadData.path
+            );
 
         const publicUrl =
           publicUrlData.publicUrl;
@@ -558,13 +562,6 @@ async function startServer() {
         const now =
           new Date().toISOString();
 
-        /**
-         * Database record.
-         *
-         * Only columns known to exist
-         * in your current media_files schema
-         * are sent.
-         */
         const mediaRecord = {
           file_name:
             file.originalname,
@@ -592,27 +589,29 @@ async function startServer() {
           description:
             formattedDescription,
 
-          created_at: now,
+          created_at:
+            now,
 
-          updated_at: now
+          updated_at:
+            now
         };
 
         const {
           data: dbData,
           error: dbError
-        } = await supabase
-          .from('media_files')
-          .insert([
-            mediaRecord
-          ])
-          .select()
-          .single();
+        } =
+          await supabase
+            .from('media_files')
+            .insert([
+              mediaRecord
+            ])
+            .select()
+            .single();
 
-        /**
-         * If DB insertion fails,
-         * remove the uploaded file.
-         *
-         * This prevents orphaned files.
+        /*
+         * VERY IMPORTANT:
+         * If database insert fails, remove
+         * the Storage file.
          */
         if (
           dbError ||
@@ -637,9 +636,6 @@ async function startServer() {
           });
         }
 
-        /**
-         * Only now report success.
-         */
         return res.status(200).json({
           success: true,
           message:
@@ -652,21 +648,21 @@ async function startServer() {
           error
         );
 
-        /**
-         * Cleanup if something failed
-         * after storage upload.
-         */
         if (
           uploadedBucket &&
           uploadedStoragePath
         ) {
           try {
             await supabase.storage
-              .from(uploadedBucket)
+              .from(
+                uploadedBucket
+              )
               .remove([
                 uploadedStoragePath
               ]);
-          } catch (cleanupError) {
+          } catch (
+            cleanupError
+          ) {
             console.error(
               'Storage cleanup error:',
               cleanupError
@@ -684,7 +680,7 @@ async function startServer() {
     }
   );
 
-  /**
+  /*
    * ADMIN SAVE EXTERNAL REEL
    */
   app.post(
@@ -724,7 +720,8 @@ async function startServer() {
             url,
 
           media_type:
-            type || 'video',
+            type ||
+            'video',
 
           mime_type:
             'video/mp4',
@@ -736,25 +733,32 @@ async function startServer() {
             'Dadacha Dhaba Reel',
 
           description:
-            descriptionEn || '',
+            descriptionEn ||
+            '',
 
-          created_at: now,
+          created_at:
+            now,
 
-          updated_at: now
+          updated_at:
+            now
         };
 
         const {
           data,
           error
-        } = await supabase
-          .from('media_files')
-          .insert([
-            mediaRecord
-          ])
-          .select()
-          .single();
+        } =
+          await supabase
+            .from('media_files')
+            .insert([
+              mediaRecord
+            ])
+            .select()
+            .single();
 
-        if (error || !data) {
+        if (
+          error ||
+          !data
+        ) {
           return res.status(500).json({
             success: false,
             error:
@@ -785,30 +789,58 @@ async function startServer() {
     }
   );
 
-  /**
+  /*
+   * =====================================================
    * ADMIN DELETE MEDIA
+   * =====================================================
+   *
+   * This route is intentionally strict.
+   *
+   * 1. Find database record.
+   * 2. Delete Storage file if one exists.
+   * 3. Verify Storage deletion did not fail.
+   * 4. Delete database record.
+   * 5. Verify database deletion did not fail.
+   * 6. Only then return success.
+   *
+   * This prevents the UI from saying "deleted"
+   * while the video remains in Supabase.
    */
   app.delete(
     '/api/admin/media/:id',
     requireAdminAuth,
     async (req, res) => {
-      try {
-        const { id } =
-          req.params;
+      const { id } =
+        req.params;
 
-        /**
-         * Get record before deleting it.
+      try {
+        if (!id) {
+          return res.status(400).json({
+            success: false,
+            error:
+              'Media ID is required.'
+          });
+        }
+
+        /*
+         * Find the database record first.
          */
         const {
-          data: items,
+          data: target,
           error: lookupError
-        } = await supabase
-          .from('media_files')
-          .select('*')
-          .eq('id', id)
-          .limit(1);
+        } =
+          await supabase
+            .from('media_files')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
 
         if (lookupError) {
+          console.error(
+            'Media lookup error:',
+            lookupError
+          );
+
           return res.status(500).json({
             success: false,
             error:
@@ -816,81 +848,207 @@ async function startServer() {
           });
         }
 
-        const target =
-          items?.[0];
+        /*
+         * If no DB record exists, remove any
+         * matching temporary memory record
+         * and tell frontend that nothing exists.
+         */
+        if (!target) {
+          const memoryIndex =
+            inMemoryMediaFiles.findIndex(
+              (media) =>
+                String(media.id) ===
+                String(id)
+            );
 
-        /**
-         * Remove Storage asset first
-         * when one exists.
+          if (
+            memoryIndex !== -1
+          ) {
+            inMemoryMediaFiles.splice(
+              memoryIndex,
+              1
+            );
+          }
+
+          return res.status(404).json({
+            success: false,
+            error:
+              'Media record not found in database.'
+          });
+        }
+
+        /*
+         * Determine the correct bucket.
+         */
+        let bucket =
+          '';
+
+        if (
+          target.media_type ===
+          'image'
+        ) {
+          bucket =
+            'website-images';
+        } else if (
+          target.media_type ===
+            'video' ||
+          target.media_type ===
+            'instagram' ||
+          target.media_type ===
+            'youtube'
+        ) {
+          bucket =
+            'website-videos';
+        }
+
+        /*
+         * Delete Storage object if this record
+         * actually has a Storage path.
+         *
+         * External Instagram / YouTube records
+         * normally have an empty storage_path,
+         * so no Storage deletion is attempted.
          */
         if (
-          target?.storage_path
+          target.storage_path &&
+          bucket
         ) {
-          const bucket =
-            target.media_type ===
-            'image'
-              ? 'website-images'
-              : 'website-videos';
-
           const {
-            error: storageError
-          } = await supabase.storage
-            .from(bucket)
-            .remove([
-              target.storage_path
-            ]);
+            data: storageDeleteData,
+            error: storageDeleteError
+          } =
+            await supabase.storage
+              .from(bucket)
+              .remove([
+                target.storage_path
+              ]);
 
-          if (storageError) {
+          console.log(
+            'Storage delete result:',
+            {
+              bucket,
+              path:
+                target.storage_path,
+              data:
+                storageDeleteData,
+              error:
+                storageDeleteError
+            }
+          );
+
+          if (
+            storageDeleteError
+          ) {
             console.error(
-              'Storage deletion error:',
-              storageError
+              'Storage deletion failed:',
+              storageDeleteError
             );
+
+            return res.status(500).json({
+              success: false,
+              error:
+                'Storage deletion failed: ' +
+                storageDeleteError.message
+            });
           }
         }
 
-        /**
-         * Delete database record.
+        /*
+         * Delete database row.
          */
         const {
           error: deleteError
-        } = await supabase
-          .from('media_files')
-          .delete()
-          .eq('id', id);
+        } =
+          await supabase
+            .from('media_files')
+            .delete()
+            .eq('id', id);
 
         if (deleteError) {
+          console.error(
+            'Database media deletion failed:',
+            deleteError
+          );
+
+          /*
+           * IMPORTANT:
+           * At this point Storage may already
+           * be deleted. We do NOT pretend that
+           * everything succeeded.
+           */
           return res.status(500).json({
             success: false,
             error:
+              'Storage was deleted, but the media database record could not be deleted: ' +
               deleteError.message
           });
         }
 
-        /**
-         * Remove temporary in-memory copy.
+        /*
+         * Verify the database row is actually gone.
          */
-        const index =
+        const {
+          data: verifyRecord,
+          error: verifyError
+        } =
+          await supabase
+            .from('media_files')
+            .select('id')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (verifyError) {
+          console.error(
+            'Deletion verification error:',
+            verifyError
+          );
+
+          return res.status(500).json({
+            success: false,
+            error:
+              'Could not verify database deletion.'
+          });
+        }
+
+        if (verifyRecord) {
+          return res.status(500).json({
+            success: false,
+            error:
+              'Media record still exists after deletion attempt.'
+          });
+        }
+
+        /*
+         * Remove temporary memory copy too.
+         */
+        const memoryIndex =
           inMemoryMediaFiles.findIndex(
             (media) =>
               String(media.id) ===
               String(id)
           );
 
-        if (index !== -1) {
+        if (
+          memoryIndex !== -1
+        ) {
           inMemoryMediaFiles.splice(
-            index,
+            memoryIndex,
             1
           );
         }
 
-        return res.json({
+        /*
+         * ONLY NOW return success.
+         */
+        return res.status(200).json({
           success: true,
           message:
-            'Media record deleted successfully.'
+            'Media deleted from Supabase Storage and database successfully.',
+          deletedId: id
         });
       } catch (error: any) {
         console.error(
-          'Media deletion error:',
+          'Media deletion exception:',
           error
         );
 
@@ -904,16 +1062,8 @@ async function startServer() {
     }
   );
 
-  /**
-   * EXISTING E-COMMERCE COMPATIBILITY APIs
-   *
-   * These are retained so your current
-   * frontend does not suddenly break.
-   *
-   * IMPORTANT:
-   * These are still demo/in-memory endpoints.
-   * They should later be replaced with
-   * Supabase database operations.
+  /*
+   * E-COMMERCE COMPATIBILITY APIs
    */
 
   app.get(
@@ -1023,8 +1173,8 @@ async function startServer() {
           'ORD-' +
           Math.floor(
             1000 +
-              Math.random() *
-                9000
+            Math.random() *
+              9000
           ),
         ...req.body
       };
@@ -1077,8 +1227,8 @@ async function startServer() {
     }
   );
 
-  /**
-   * Vite middleware for development.
+  /*
+   * VITE
    */
   if (
     process.env.NODE_ENV !==
@@ -1096,9 +1246,6 @@ async function startServer() {
       vite.middlewares
     );
   } else {
-    /**
-     * Serve React production build.
-     */
     const distPath =
       path.join(
         process.cwd(),
@@ -1111,12 +1258,6 @@ async function startServer() {
       )
     );
 
-    /**
-     * SPA fallback.
-     *
-     * API routes above this point
-     * have already been handled.
-     */
     app.get(
       '*',
       (_req, res) => {
@@ -1130,9 +1271,6 @@ async function startServer() {
     );
   }
 
-  /**
-   * Start server.
-   */
   app.listen(
     PORT,
     '0.0.0.0',
