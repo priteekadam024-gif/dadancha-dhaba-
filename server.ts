@@ -326,24 +326,38 @@ async function startServer() {
     ]
   }));
 
-  // Vite middleware for dev / static serving in production
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(` Dadacha Dhaba Server running on http://0.0.0.0:${PORT}`);
+// Backend health check
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Dadacha Dhaba backend is running'
   });
+});
+
+// Vite middleware for dev / static serving in production
+if (process.env.NODE_ENV !== 'production') {
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa',
+  });
+
+  app.use(vite.middlewares);
+} else {
+  const distPath = path.join(process.cwd(), 'dist');
+
+  app.use(express.static(distPath));
+
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// Start the Express server
+const PORT = Number(process.env.PORT) || 10000;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Dadacha Dhaba backend running on port ${PORT}`);
+});
 }
 
 startServer();
