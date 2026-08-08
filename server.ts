@@ -111,6 +111,13 @@ async function startServer() {
     res.json({ success: true, message: 'Password reset instructions sent' });
   });
 
+  app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Dadacha Dhaba backend is running'
+  });
+});
+  
   // Public Media API - Read published videos / images
   app.get('/api/media', async (_req, res) => {
     try {
