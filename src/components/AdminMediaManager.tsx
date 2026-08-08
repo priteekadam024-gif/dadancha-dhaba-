@@ -436,24 +436,161 @@ export const AdminMediaManager: React.FC = () => {
   };
 
   // Delete Media Item
-  const handleDeleteMedia = async (record: MediaFileRecord) => {
-    if (!record.id) return;
+  const handleDeleteMedia = async (
+  record: MediaFileRecord
+) => {
+  if (!record.id) {
+    showToast(
+      'Cannot delete media: media ID is missing.',
+      'error'
+    );
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      `Are you sure you want to permanently delete "${record.title || record.file_name}"?\n\nThis will remove it from the website and Supabase.`
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const adminToken =
+      sessionStorage.getItem(
+        'adminAuthToken'
+      ) ||
+      localStorage.getItem(
+        'adminAuthToken'
+      );
+
+    if (!adminToken) {
+      showToast(
+        'Admin session expired. Please log in again.',
+        'error'
+      );
+      return;
+    }
+
+    const apiBaseUrl =
+      (
+        import.meta.env
+          .VITE_API_BASE_URL ||
+        'https://dadancha-dhaba-backend.onrender.com'
+      ).replace(/\/$/, '');
+
+    /*
+     * Delete through the secure backend.
+     *
+     * The backend deletes:
+     * 1. Supabase Storage file
+     * 2. media_files database row
+     *
+     * The backend only returns success when
+     * the deletion has actually succeeded.
+     */
+    const response =
+      await fetch(
+        `${apiBaseUrl}/api/admin/media/${record.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'x-admin-token':
+              adminToken
+          }
+        }
+      );
+
+    let result: any =
+      null;
 
     try {
-      const bucket = record.media_type === 'video' ? 'website-videos' : 'website-images';
-      const res = await supabaseDeleteMediaRecord(record.id, record.storage_path, bucket);
-      
-      if (res.success) {
-        showToast('Media deleted successfully.', 'success');
-        fetchMediaFromSupabase();
-      } else {
-        showToast('Could not delete media record.', 'error');
-      }
-    } catch (err) {
-      showToast('Error deleting media', 'error');
+      result =
+        await response.json();
+    } catch {
+      result = null;
     }
-  };
 
+    if (
+      !response.ok ||
+      !result?.success
+    ) {
+      throw new Error(
+        result?.error ||
+          result?.message ||
+          `Delete failed with HTTP ${response.status}`
+      );
+    }
+
+    /*
+     * Remove it immediately from the
+     * visible frontend list.
+     */
+    setMediaList(
+      (currentList) =>
+        currentList.filter(
+          (item) =>
+            String(item.id) !==
+            String(record.id)
+        )
+    );
+
+    /*
+     * Close preview if the deleted item
+     * was currently open.
+     */
+    if (
+      selectedMedia &&
+      String(selectedMedia.id) ===
+        String(record.id)
+    ) {
+      setSelectedMedia(null);
+    }
+
+    /*
+     * Close edit modal if it was open.
+     */
+    if (
+      editingMedia &&
+      String(editingMedia.id) ===
+        String(record.id)
+    ) {
+      setEditingMedia(null);
+    }
+
+    showToast(
+      'Video deleted from the website and Supabase successfully.',
+      'success'
+    );
+
+    /*
+     * Reload from Supabase/backend to make
+     * absolutely sure the deleted record
+     * is no longer present.
+     */
+    await fetchMediaFromSupabase();
+  } catch (err: any) {
+    console.error(
+      'Admin media deletion failed:',
+      err
+    );
+
+    showToast(
+      `Delete failed: ${
+        err?.message ||
+        'Unable to delete media.'
+      }`,
+      'error'
+    );
+
+    /*
+     * If deletion failed, refresh the list
+     * instead of pretending it was deleted.
+     */
+    await fetchMediaFromSupabase();
+  }
+};
   // Filtered Media List
   const filteredMedia = mediaList.filter(item => {
     const matchesSearch = item.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
