@@ -391,7 +391,7 @@ async function startServer() {
 
   app.post('/api/admin/products', requireAdminAuth, async (req, res) => {
     try {
-      const productPayload = req.body;
+      const productPayload = { ...req.body };
       if (!productPayload || (!productPayload.name_en && !productPayload.nameEn)) {
         return res.status(400).json({ success: false, error: 'Product name (English) is required' });
       }
@@ -407,10 +407,10 @@ async function startServer() {
         .upsert([productPayload], { onConflict: 'id' })
         .select();
 
-      if (error) {
-        return res.status(500).json({ success: false, error: error.message });
+      if (error || !data || data.length === 0) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to insert product into database' });
       }
-      return res.json({ success: true, product: data?.[0] || productPayload });
+      return res.json({ success: true, product: data[0] });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -418,7 +418,7 @@ async function startServer() {
 
   app.post('/api/products', requireAdminAuth, async (req, res) => {
     try {
-      const productPayload = req.body;
+      const productPayload = { ...req.body };
       if (!productPayload.id) {
         productPayload.id = 'p-' + Date.now();
       }
@@ -429,10 +429,10 @@ async function startServer() {
         .upsert([productPayload], { onConflict: 'id' })
         .select();
 
-      if (error) {
-        return res.status(500).json({ success: false, error: error.message });
+      if (error || !data || data.length === 0) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to insert product into database' });
       }
-      return res.json({ success: true, product: data?.[0] || productPayload });
+      return res.json({ success: true, product: data[0] });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -445,14 +445,13 @@ async function startServer() {
 
       const { data, error } = await supabase
         .from('products')
-        .update(productPayload)
-        .eq('id', id)
+        .upsert([productPayload], { onConflict: 'id' })
         .select();
 
-      if (error) {
-        return res.status(500).json({ success: false, error: error.message });
+      if (error || !data || data.length === 0) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to update product in database' });
       }
-      return res.json({ success: true, product: data?.[0] || productPayload });
+      return res.json({ success: true, product: data[0] });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -531,7 +530,7 @@ async function startServer() {
 
   app.post('/api/admin/categories', requireAdminAuth, async (req, res) => {
     try {
-      const categoryPayload = req.body;
+      const categoryPayload = { ...req.body };
       if (!categoryPayload || (!categoryPayload.name_en && !categoryPayload.nameEn)) {
         return res.status(400).json({ success: false, error: 'Category name (English) is required' });
       }
@@ -547,10 +546,10 @@ async function startServer() {
         .upsert([categoryPayload], { onConflict: 'id' })
         .select();
 
-      if (error) {
-        return res.status(500).json({ success: false, error: error.message });
+      if (error || !data || data.length === 0) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to insert category into database' });
       }
-      return res.json({ success: true, category: data?.[0] || categoryPayload });
+      return res.json({ success: true, category: data[0] });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -586,14 +585,13 @@ async function startServer() {
 
       const { data, error } = await supabase
         .from('categories')
-        .update(categoryPayload)
-        .eq('id', id)
+        .upsert([categoryPayload], { onConflict: 'id' })
         .select();
 
-      if (error) {
-        return res.status(500).json({ success: false, error: error.message });
+      if (error || !data || data.length === 0) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to update category in database' });
       }
-      return res.json({ success: true, category: data?.[0] || categoryPayload });
+      return res.json({ success: true, category: data[0] });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }

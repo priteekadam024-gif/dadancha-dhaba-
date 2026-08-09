@@ -1015,16 +1015,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString().split('T')[0],
     };
     
-    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(newProd));
-    if (error) {
-      showToast(`Database error: ${error.message || 'Failed to save product'}`, 'error');
+    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(newProd), false);
+    if (error || !data) {
+      showToast(`Database error: ${error?.message || 'Failed to save product'}`, 'error');
     } else {
-      if (data) {
-        const mapped = mapDbProductToFrontend(data);
-        setProducts((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
-      } else {
-        setProducts((prev) => [newProd, ...prev]);
-      }
+      const mapped = mapDbProductToFrontend(data);
+      setProducts((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
       showToast(language === 'mr' ? 'नवीन उत्पादन जोडले!' : 'Product added successfully!');
     }
   };
@@ -1034,16 +1030,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!existing) return;
 
     const merged = { ...existing, ...updatedFields };
-    setProducts((prev) => prev.map((p) => (p.id === id ? merged : p)));
 
-    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(merged));
-    if (error) {
-      showToast(`Database update error: ${error.message || 'Failed to update product'}`, 'error');
+    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(merged), true);
+    if (error || !data) {
+      showToast(`Database update error: ${error?.message || 'Failed to update product'}`, 'error');
     } else {
-      if (data) {
-        const mapped = mapDbProductToFrontend(data);
-        setProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
-      }
+      const mapped = mapDbProductToFrontend(data);
+      setProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
       showToast(language === 'mr' ? 'उत्पादन अपडेट झाले!' : 'Product updated successfully!');
     }
   };
@@ -1074,16 +1067,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
     };
 
-    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(newCat));
-    if (error) {
-      showToast(`Database error: ${error.message || 'Failed to save category'}`, 'error');
+    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(newCat), false);
+    if (error || !data) {
+      showToast(`Database error: ${error?.message || 'Failed to save category'}`, 'error');
     } else {
-      if (data) {
-        const mapped = mapDbCategoryToFrontend(data);
-        setCategories((prev) => [...prev.filter((c) => c.id !== mapped.id), mapped]);
-      } else {
-        setCategories((prev) => [...prev, newCat]);
-      }
+      const mapped = mapDbCategoryToFrontend(data);
+      setCategories((prev) => [...prev.filter((c) => c.id !== mapped.id), mapped]);
       showToast(language === 'mr' ? 'नवीन श्रेणी यशस्वीपणे जोडली!' : 'Category created successfully!');
     }
   };
@@ -1093,16 +1082,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!existing) return;
 
     const merged = { ...existing, ...fields, updatedAt: new Date().toISOString().split('T')[0] };
-    setCategories((prev) => prev.map((c) => (c.id === id ? merged : c)));
 
-    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(merged));
-    if (error) {
-      showToast(`Database update error: ${error.message || 'Failed to update category'}`, 'error');
+    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(merged), true);
+    if (error || !data) {
+      showToast(`Database update error: ${error?.message || 'Failed to update category'}`, 'error');
     } else {
-      if (data) {
-        const mapped = mapDbCategoryToFrontend(data);
-        setCategories((prev) => prev.map((c) => (c.id === id ? mapped : c)));
-      }
+      const mapped = mapDbCategoryToFrontend(data);
+      setCategories((prev) => prev.map((c) => (c.id === id ? mapped : c)));
       showToast(language === 'mr' ? 'श्रेणी अपडेट झाली!' : 'Category updated successfully!');
     }
   };

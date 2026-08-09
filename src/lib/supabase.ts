@@ -407,11 +407,10 @@ export async function supabaseGetProducts() {
 /**
  * Save or Upsert product to Supabase 'products' table via Express backend
  */
-export async function supabaseSaveProduct(productRecord: any) {
+export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean = false) {
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
-    const isUpdate = Boolean(productRecord.id);
 
     const url = isUpdate
       ? `${apiBase}/api/admin/products/${encodeURIComponent(productRecord.id)}`
@@ -537,11 +536,10 @@ export async function supabaseGetCategories() {
 /**
  * Save or Upsert category to Supabase 'categories' table via Express backend
  */
-export async function supabaseSaveCategory(categoryRecord: any) {
+export async function supabaseSaveCategory(categoryRecord: any, isUpdate: boolean = false) {
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
-    const isUpdate = Boolean(categoryRecord.id);
 
     const url = isUpdate
       ? `${apiBase}/api/admin/categories/${encodeURIComponent(categoryRecord.id)}`
