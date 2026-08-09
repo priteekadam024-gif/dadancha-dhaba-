@@ -291,10 +291,8 @@ export const AdminMediaManager: React.FC = () => {
         throw new Error('Admin session not found. Please log in again.');
       }
 
-      // Vercel hosts the frontend; Render hosts the Express backend.
-      const apiBaseUrl =
-        (import.meta.env.VITE_API_BASE_URL ||
-          'https://dadancha-dhaba-backend.onrender.com').replace(/\/$/, '');
+      // Vercel hosts the frontend; Render / Express hosts the backend.
+      const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
       const formData = new FormData();
       formData.append('file', uploadedFile);
@@ -473,12 +471,7 @@ export const AdminMediaManager: React.FC = () => {
       return;
     }
 
-    const apiBaseUrl =
-      (
-        import.meta.env
-          .VITE_API_BASE_URL ||
-        'https://dadancha-dhaba-backend.onrender.com'
-      ).replace(/\/$/, '');
+    const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     /*
      * Delete through the secure backend.
