@@ -397,7 +397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           instagramUrl: siteSettings.instagram_url || '',
           youtubeUrl: siteSettings.youtube_url || '',
           facebookUrl: siteSettings.facebook_url || '',
-          logo_url: siteSettings.logo_url || '/assets/dadacha-dhaba-logo.png',
+          logo_url: siteSettings.logo_url || 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
         });
       }
     } catch (err: any) {
@@ -529,7 +529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     instagramUrl: 'https://www.instagram.com/dadanchadhaba?igsh=MTIzajBqdG1pdHJ5aA==',
     youtubeUrl: 'https://youtube.com/@dadanchadhaba?si=3KnepBsTXtH6-Opz',
     facebookUrl: 'https://www.facebook.com/share/199iUku8xx/',
-    logo_url: '/assets/dadacha-dhaba-logo.png',
+    logo_url: 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
   }));
 
   const updateContactConfig = async (newConfig: Partial<ContactConfig>) => {

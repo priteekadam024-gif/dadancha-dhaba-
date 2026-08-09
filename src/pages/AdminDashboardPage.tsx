@@ -46,7 +46,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ defaultT
   const [settingsInstagram, setSettingsInstagram] = useState(contactConfig.instagramUrl || 'https://www.instagram.com/dadanchadhaba?igsh=MTIzajBqdG1pdHJ5aA==');
   const [settingsYoutube, setSettingsYoutube] = useState(contactConfig.youtubeUrl || 'https://youtube.com/@dadanchadhaba?si=3KnepBsTXtH6-Opz');
   const [settingsFacebook, setSettingsFacebook] = useState(contactConfig.facebookUrl || 'https://www.facebook.com/share/199iUku8xx/');
-  const [settingsLogoUrl, setSettingsLogoUrl] = useState(contactConfig.logo_url || '/assets/dadacha-dhaba-logo.png');
+  const [settingsLogoUrl, setSettingsLogoUrl] = useState(contactConfig.logo_url || 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png');
   const [copiedSql, setCopiedSql] = useState(false);
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -778,7 +778,7 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
                     <button
                       type="button"
                       onClick={() => {
-                        setSettingsLogoUrl('/assets/dadacha-dhaba-logo.png');
+                        setSettingsLogoUrl('https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png');
                         showToast(language === 'mr' ? 'मूळ अधिकृत लोगो पुनर्संचयित केला!' : 'Reset to default official logo!');
                       }}
                       className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold px-4 py-2 rounded-xl border border-zinc-700 transition-all text-center shrink-0"
@@ -853,7 +853,7 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
                       value={settingsLogoUrl}
                       onChange={(e) => setSettingsLogoUrl(e.target.value)}
                       className="w-full bg-[#161616] text-white text-xs p-3 rounded-xl border border-zinc-800 focus:outline-none focus:border-[#F4B400] font-mono"
-                      placeholder="/assets/dadacha-dhaba-logo.png or https://..."
+                      placeholder="https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/... or https://..."
                     />
                   </div>
                 </div>

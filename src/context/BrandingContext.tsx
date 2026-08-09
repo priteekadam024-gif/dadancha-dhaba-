@@ -31,9 +31,12 @@ export interface BrandingSettings {
   updatedAt: string;
 }
 
+const SUPABASE_DEFAULT_LOGO = 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png';
+const OFFICIAL_LOGO_FALLBACK = SUPABASE_DEFAULT_LOGO;
+
 export const DEFAULT_BRANDING: BrandingSettings = {
-  logoUrl: '/assets/dadacha-dhaba-logo.png',
-  faviconUrl: '/assets/dadacha-dhaba-logo.png',
+  logoUrl: SUPABASE_DEFAULT_LOGO,
+  faviconUrl: SUPABASE_DEFAULT_LOGO,
   siteName: 'Dadacha Dhaba',
   taglineMr: 'चव आमची ओळख तुमची ! ❤️',
   taglineEn: 'Taste, Service & Authentic Dhaba Love ❤️',
@@ -49,8 +52,8 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   history: [
     {
       id: 'default-initial-v1',
-      logoUrl: '/assets/dadacha-dhaba-logo.png',
-      faviconUrl: '/assets/dadacha-dhaba-logo.png',
+      logoUrl: SUPABASE_DEFAULT_LOGO,
+      faviconUrl: SUPABASE_DEFAULT_LOGO,
       changedAt: new Date().toISOString(),
       changedBy: 'System Default',
       label: 'Official Dadacha Dhaba Brand Emblem',
@@ -73,14 +76,19 @@ interface BrandingContextType {
 const BrandingContext = createContext<BrandingContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'dadacha_dhaba_branding_v2';
-const OFFICIAL_LOGO_FALLBACK = '/assets/dadacha-dhaba-logo.png';
 
 function isUsableLogoUrl(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
 function normalizeLogoUrl(value: unknown): string {
-  return isUsableLogoUrl(value) ? value.trim() : OFFICIAL_LOGO_FALLBACK;
+  return isUsableLogoUrl(value) ? value.trim() : SUPABASE_DEFAULT_LOGO;
+}
+
+function attachCacheBuster(url: string, updatedAt?: string): string {
+  if (!url || url.startsWith('data:')) return url;
+  const version = updatedAt ? encodeURIComponent(updatedAt) : Date.now().toString();
+  return `${url}${url.includes('?') ? '&' : '?'}v=${version}`;
 }
 
 /**
@@ -91,7 +99,7 @@ function updateFaviconInDOM(faviconUrl: string) {
 
   const timestampedUrl = faviconUrl.startsWith('data:') 
     ? faviconUrl 
-    : `${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    : attachCacheBuster(faviconUrl, new Date().toISOString());
 
   let linkIcon = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
   if (!linkIcon) {
@@ -136,8 +144,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const effectiveFavicon = branding.useGlobalForFavicon || !branding.faviconUrl 
       ? branding.logoUrl 
       : branding.faviconUrl;
-    updateFaviconInDOM(effectiveFavicon || '/assets/dadacha-dhaba-logo.png');
-  }, [branding.logoUrl, branding.faviconUrl, branding.useGlobalForFavicon]);
+    updateFaviconInDOM(effectiveFavicon || SUPABASE_DEFAULT_LOGO);
+  }, [branding.logoUrl, branding.faviconUrl, branding.useGlobalForFavicon, branding.updatedAt]);
 
   // Fetch remote settings from Supabase on mount
   useEffect(() => {
@@ -184,39 +192,24 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const getEffectiveLogo = (purpose?: 'main' | 'login' | 'admin' | 'invoice' | 'footer' | 'header'): string => {
-    if (!purpose || purpose === 'main' || purpose === 'footer' || purpose === 'header') {
-      return normalizeLogoUrl(branding.logoUrl);
+    let rawUrl = branding.logoUrl;
+    if (purpose === 'login' && !branding.useGlobalForLogin && branding.loginLogoUrl) {
+      rawUrl = branding.loginLogoUrl;
+    } else if (purpose === 'admin' && !branding.useGlobalForAdmin && branding.adminLogoUrl) {
+      rawUrl = branding.adminLogoUrl;
+    } else if (purpose === 'invoice' && !branding.useGlobalForInvoice && branding.invoiceLogoUrl) {
+      rawUrl = branding.invoiceLogoUrl;
     }
-    if (purpose === 'login') {
-      return normalizeLogoUrl(
-        branding.useGlobalForLogin || !branding.loginLogoUrl
-          ? branding.logoUrl
-          : branding.loginLogoUrl
-      );
-    }
-    if (purpose === 'admin') {
-      return normalizeLogoUrl(
-        branding.useGlobalForAdmin || !branding.adminLogoUrl
-          ? branding.logoUrl
-          : branding.adminLogoUrl
-      );
-    }
-    if (purpose === 'invoice') {
-      return normalizeLogoUrl(
-        branding.useGlobalForInvoice || !branding.invoiceLogoUrl
-          ? branding.logoUrl
-          : branding.invoiceLogoUrl
-      );
-    }
-    return normalizeLogoUrl(branding.logoUrl);
+    const normalized = normalizeLogoUrl(rawUrl);
+    return attachCacheBuster(normalized, branding.updatedAt);
   };
 
   const getEffectiveFavicon = (): string => {
-    return normalizeLogoUrl(
-      branding.useGlobalForFavicon || !branding.faviconUrl
-        ? branding.logoUrl
-        : branding.faviconUrl
-    );
+    const rawUrl = branding.useGlobalForFavicon || !branding.faviconUrl
+      ? branding.logoUrl
+      : branding.faviconUrl;
+    const normalized = normalizeLogoUrl(rawUrl);
+    return attachCacheBuster(normalized, branding.updatedAt);
   };
 
   const uploadAssetFile = async (file: File, folder: string = 'branding'): Promise<{ publicUrl: string; storagePath: string } | null> => {

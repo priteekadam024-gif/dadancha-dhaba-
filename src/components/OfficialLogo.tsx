@@ -29,7 +29,7 @@ export const OfficialLogo: React.FC<OfficialLogoProps> = ({
   const currentLang = lang || contextLang;
 
   // Global single source of truth logo asset path
-  const OFFICIAL_LOGO_FALLBACK = '/assets/dadacha-dhaba-logo.png';
+  const OFFICIAL_LOGO_FALLBACK = 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png';
   const logoSrc = customLogoUrl || getEffectiveLogo(purpose) || OFFICIAL_LOGO_FALLBACK;
 
   const badgeSizes = {
