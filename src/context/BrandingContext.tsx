@@ -64,7 +64,7 @@ interface BrandingContextType {
   getEffectiveLogo: (purpose?: 'main' | 'login' | 'admin' | 'invoice' | 'footer' | 'header') => string;
   getEffectiveFavicon: () => string;
   applyBrandingEverywhere: (newConfig: Partial<BrandingSettings>, historyLabel?: string) => Promise<boolean>;
-  uploadAssetFile: (file: File, folder?: string) => Promise<string>;
+  uploadAssetFile: (file: File, folder?: string) => Promise<{ publicUrl: string; storagePath: string } | null>;
   resetToDefaultBranding: () => Promise<boolean>;
   restoreFromHistory: (item: BrandingHistoryItem) => Promise<boolean>;
   isLoading: boolean;
@@ -219,32 +219,16 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   };
 
-  const uploadAssetFile = async (file: File, folder: string = 'branding'): Promise<string> => {
-    // Attempt Supabase Storage upload
-    const uploadResult = await supabaseUploadBrandingAsset(file, folder);
-    if (uploadResult?.publicUrl) {
-      return uploadResult.publicUrl;
-    }
-
-    // Fallback to Data URL for instant guaranteed persistence
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          resolve(e.target.result as string);
-        } else {
-          reject(new Error('Failed reading image file'));
-        }
-      };
-      reader.onerror = () => reject(new Error('File reading error'));
-      reader.readAsDataURL(file);
-    });
+  const uploadAssetFile = async (file: File, folder: string = 'branding'): Promise<{ publicUrl: string; storagePath: string } | null> => {
+    return await supabaseUploadBrandingAsset(file, folder);
   };
 
   const applyBrandingEverywhere = async (newConfig: Partial<BrandingSettings>, historyLabel?: string): Promise<boolean> => {
     try {
       const newLogoUrl = newConfig.logoUrl || branding.logoUrl;
+      const newLogoPath = newConfig.logoStoragePath !== undefined ? newConfig.logoStoragePath : branding.logoStoragePath;
       const newFaviconUrl = newConfig.faviconUrl || (newConfig.useGlobalForFavicon !== false ? newLogoUrl : branding.faviconUrl);
+      const newFaviconPath = newConfig.faviconStoragePath !== undefined ? newConfig.faviconStoragePath : branding.faviconStoragePath;
 
       // Create history entry
       const historyEntry: BrandingHistoryItem = {
@@ -262,42 +246,45 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...branding,
         ...newConfig,
         logoUrl: newLogoUrl,
+        logoStoragePath: newLogoPath,
         faviconUrl: newFaviconUrl,
+        faviconStoragePath: newFaviconPath,
         history: updatedHistory,
         updatedAt: new Date().toISOString(),
       };
 
-      // 1. Update React Context State immediately
-      setBranding(merged);
-
-      // 2. Persist to LocalStorage Cache
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
-
-      // 3. Update DOM Favicon immediately
-      updateFaviconInDOM(getEffectiveFavicon());
-
-      // 4. Save to Supabase Database
+      // 1. Prepare exact DB payload matching existing columns in public.site_settings
       const dbPayload = {
-        site_name: merged.siteName,
-        tagline_mr: merged.taglineMr,
-        tagline_en: merged.taglineEn,
+        site_name: merged.siteName || 'Dadacha Dhaba',
         logo_url: merged.logoUrl,
         logo_storage_path: merged.logoStoragePath || null,
         favicon_url: merged.faviconUrl,
         favicon_storage_path: merged.faviconStoragePath || null,
-        login_logo_url: merged.loginLogoUrl || null,
-        admin_logo_url: merged.adminLogoUrl || null,
-        invoice_logo_url: merged.invoiceLogoUrl || null,
         og_image_url: merged.ogImageUrl || null,
-        use_global_for_favicon: merged.useGlobalForFavicon,
-        use_global_for_login: merged.useGlobalForLogin,
-        use_global_for_admin: merged.useGlobalForAdmin,
-        use_global_for_invoice: merged.useGlobalForInvoice,
-        use_global_for_og: merged.useGlobalForOg,
-        history: merged.history,
+        og_image_storage_path: merged.ogImageUrl || null,
+        use_global_logo_for_header: true,
+        use_global_logo_for_footer: true,
+        use_global_logo_for_login: merged.useGlobalForLogin ?? true,
+        use_global_logo_for_admin: merged.useGlobalForAdmin ?? true,
+        use_global_logo_for_invoice: merged.useGlobalForInvoice ?? true,
       };
 
-      await supabaseSaveSiteSettings(dbPayload);
+      // 2. Save to Supabase Database FIRST
+      const { error: saveError } = await supabaseSaveSiteSettings(dbPayload);
+      if (saveError) {
+        console.error('Failed saving site_settings to database:', saveError);
+        return false;
+      }
+
+      // 3. Update React Context State ONLY if DB save succeeds
+      setBranding(merged);
+
+      // 4. Persist to LocalStorage Cache
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+
+      // 5. Update DOM Favicon immediately
+      updateFaviconInDOM(newFaviconUrl);
+
       return true;
     } catch (err) {
       console.error('Failed applying branding everywhere:', err);

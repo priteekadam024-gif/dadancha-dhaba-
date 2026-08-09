@@ -278,6 +278,100 @@ async function startServer() {
     }
   });
 
+  // ADMIN BRANDING APIS - Protected by requireAdminAuth
+
+  // Admin Upload Branding File to 'site-assets' bucket
+  app.post('/api/admin/branding/upload', requireAdminAuth, upload.single('file'), async (req, res) => {
+    try {
+      const file = req.file;
+      const folder = (req.body?.folder || 'branding/logo').toString();
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'No branding image file provided' });
+      }
+
+      const bucketName = 'site-assets';
+      const fileExt = file.originalname.split('.').pop() || 'png';
+      const cleanName = file.originalname.replace(/[^a-zA-Z0-9]/g, '_');
+      const storagePath = `${folder}/${Date.now()}_${cleanName}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(storagePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true
+        });
+
+      if (uploadError) {
+        return res.status(500).json({ success: false, error: uploadError.message });
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(uploadData.path);
+
+      return res.json({
+        success: true,
+        publicUrl: publicUrlData.publicUrl,
+        storagePath: uploadData.path
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Admin Save Branding Settings to public.site_settings
+  app.post('/api/admin/branding/save', requireAdminAuth, async (req, res) => {
+    try {
+      const settings = req.body || {};
+
+      const { data: existingRows } = await supabase
+        .from('site_settings')
+        .select('id')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      const existingId = existingRows?.[0]?.id;
+
+      const recordPayload = {
+        site_name: settings.site_name || 'Dadacha Dhaba',
+        logo_url: settings.logo_url || null,
+        logo_storage_path: settings.logo_storage_path || null,
+        favicon_url: settings.favicon_url || null,
+        favicon_storage_path: settings.favicon_storage_path || null,
+        og_image_url: settings.og_image_url || null,
+        og_image_storage_path: settings.og_image_storage_path || null,
+        use_global_logo_for_header: settings.use_global_logo_for_header ?? true,
+        use_global_logo_for_footer: settings.use_global_logo_for_footer ?? true,
+        use_global_logo_for_login: settings.use_global_logo_for_login ?? true,
+        use_global_logo_for_admin: settings.use_global_logo_for_admin ?? true,
+        use_global_logo_for_invoice: settings.use_global_logo_for_invoice ?? true,
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (existingId) {
+        result = await supabase
+          .from('site_settings')
+          .update(recordPayload)
+          .eq('id', existingId)
+          .select();
+      } else {
+        result = await supabase
+          .from('site_settings')
+          .insert([recordPayload])
+          .select();
+      }
+
+      if (result.error) {
+        return res.status(500).json({ success: false, error: result.error.message });
+      }
+
+      return res.json({ success: true, settings: result.data?.[0] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Other e-commerce APIs
   app.get('/api/products', (_req, res) => res.json({ success: true, products: mockProducts }));
   app.post('/api/products', (req, res) => {

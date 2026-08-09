@@ -149,39 +149,60 @@ export const BrandingManager: React.FC = () => {
 
     try {
       let finalLogoUrl = branding.logoUrl;
+      let finalLogoPath = branding.logoStoragePath || '';
       let finalFaviconUrl = branding.faviconUrl;
-      let finalLoginLogoUrl = branding.loginLogoUrl;
-      let finalAdminLogoUrl = branding.adminLogoUrl;
-      let finalInvoiceLogoUrl = branding.invoiceLogoUrl;
+      let finalFaviconPath = branding.faviconStoragePath || '';
 
       // 1. Upload candidate main logo if selected
       if (candidateLogoFile) {
-        finalLogoUrl = await uploadAssetFile(candidateLogoFile, 'branding/logo');
-      } else if (candidateLogo) {
-        finalLogoUrl = candidateLogo;
+        const uploadRes = await uploadAssetFile(candidateLogoFile, 'branding/logo');
+        if (uploadRes && uploadRes.publicUrl) {
+          finalLogoUrl = uploadRes.publicUrl;
+          finalLogoPath = uploadRes.storagePath;
+        } else {
+          showToast(
+            language === 'mr'
+              ? 'लोगो इमेज स्टोरेजमध्ये अपलोड करणे अयशस्वी झाले.'
+              : 'Failed to upload logo image to Supabase Storage.',
+            'error'
+          );
+          setIsApplying(false);
+          return;
+        }
       }
 
       // 2. Upload candidate favicon if selected
       if (useGlobalForFavicon) {
         finalFaviconUrl = finalLogoUrl;
+        finalFaviconPath = finalLogoPath;
       } else if (candidateFaviconFile) {
-        finalFaviconUrl = await uploadAssetFile(candidateFaviconFile, 'branding/favicon');
-      } else if (candidateFavicon) {
-        finalFaviconUrl = candidateFavicon;
+        const uploadRes = await uploadAssetFile(candidateFaviconFile, 'branding/favicon');
+        if (uploadRes && uploadRes.publicUrl) {
+          finalFaviconUrl = uploadRes.publicUrl;
+          finalFaviconPath = uploadRes.storagePath;
+        } else {
+          showToast(
+            language === 'mr'
+              ? 'फेव्हिकॉन इमेज स्टोरेजमध्ये अपलोड करणे अयशस्वी झाले.'
+              : 'Failed to upload favicon image to Supabase Storage.',
+            'error'
+          );
+          setIsApplying(false);
+          return;
+        }
       }
 
       // 3. Apply everywhere in global context & database
       const success = await applyBrandingEverywhere({
         logoUrl: finalLogoUrl,
+        logoStoragePath: finalLogoPath,
         faviconUrl: finalFaviconUrl,
-        loginLogoUrl: useGlobalForLogin ? '' : (candidateLoginLogo || finalLogoUrl),
-        adminLogoUrl: useGlobalForAdmin ? '' : (candidateAdminLogo || finalLogoUrl),
-        invoiceLogoUrl: useGlobalForInvoice ? '' : (candidateInvoiceLogo || finalLogoUrl),
+        faviconStoragePath: finalFaviconPath,
         useGlobalForFavicon,
         useGlobalForLogin,
         useGlobalForAdmin,
         useGlobalForInvoice,
-      }, `Updated by Admin (${candidateLogoFile?.name || 'Custom Asset'})`);
+      }, `Updated by Admin (${candidateLogoFile?.name || candidateFaviconFile?.name || 'Custom Asset'})`);
 
       if (success) {
         setCandidateLogoFile(null);
@@ -192,16 +213,21 @@ export const BrandingManager: React.FC = () => {
 
         showToast(
           language === 'mr' 
-            ? 'लोगो संपूर्ण वेबसाईटवर यशस्वीरित्या अपडेट झाला! 🎉' 
-            : 'Logo updated successfully across the entire website.',
+            ? 'लोगो आणि ब्रँडिंग माहिती संपूर्ण वेबसाईटवर यशस्वीरित्या अपडेट झाली! 🎉' 
+            : 'Branding updated successfully',
           'success'
         );
       } else {
-        showToast('Unable to upload logo. Please try again.', 'error');
+        showToast(
+          language === 'mr'
+            ? 'डेटाबेसमध्ये ब्रँडिंग सेटिंग्स सेव्ह करणे अयशस्वी झाले.'
+            : 'Failed to save branding settings to database.',
+          'error'
+        );
       }
     } catch (err) {
       console.error(err);
-      showToast('Logo uploaded, but could not update website settings.', 'error');
+      showToast('Error updating branding settings.', 'error');
     } finally {
       setIsApplying(false);
     }
