@@ -353,12 +353,40 @@ export async function supabaseSaveContactMessage(messageData: { name: string; ph
   }
 }
 
+function getAdminAuthToken(): string {
+  if (typeof window === 'undefined') return 'dadacha-admin-secret-token-2026';
+  return (
+    sessionStorage.getItem('adminAuthToken') ||
+    localStorage.getItem('adminAuthToken') ||
+    localStorage.getItem('dadacha_admin_token') ||
+    'dadacha-admin-secret-token-2026'
+  );
+}
+
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '';
+  if (envUrl) return envUrl.replace(/\/$/, '');
+  return '';
+}
+
 /**
  * Fetch products from Supabase 'products' table
  */
 export async function supabaseGetProducts() {
-  if (!supabase) return [];
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/api/products`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.products)) {
+        return json.products;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend /api/products fetch notice, falling back to client Supabase:', err);
+  }
 
+  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('products')
@@ -377,11 +405,43 @@ export async function supabaseGetProducts() {
 }
 
 /**
- * Save or Upsert product to Supabase 'products' table
+ * Save or Upsert product to Supabase 'products' table via Express backend
  */
 export async function supabaseSaveProduct(productRecord: any) {
-  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+    const isUpdate = Boolean(productRecord.id);
 
+    const url = isUpdate
+      ? `${apiBase}/api/admin/products/${encodeURIComponent(productRecord.id)}`
+      : `${apiBase}/api/admin/products`;
+
+    const res = await fetch(url, {
+      method: isUpdate ? 'PUT' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(productRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.product) {
+        return { data: json.product, error: null };
+      } else if (json.error) {
+        return { data: null, error: new Error(json.error) };
+      }
+    } else {
+      const errorJson = await res.json().catch(() => ({}));
+      return { data: null, error: new Error(errorJson.error || `Server status ${res.status}`) };
+    }
+  } catch (err: any) {
+    console.warn('Backend save product notice, attempting client fallback:', err?.message);
+  }
+
+  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
   try {
     const { data, error } = await supabase
       .from('products')
@@ -389,31 +449,52 @@ export async function supabaseSaveProduct(productRecord: any) {
       .select();
 
     if (error) {
-      console.warn('Supabase save product notice:', error.message);
       return { data: null, error };
     }
-    return { data, error: null };
+    return { data: data?.[0] || productRecord, error: null };
   } catch (err: any) {
-    console.warn('Supabase save product exception:', err);
     return { data: null, error: err };
   }
 }
 
 /**
- * Delete product from Supabase 'products' table
+ * Delete product from Supabase 'products' table via Express backend
  */
 export async function supabaseDeleteProduct(productId: string) {
-  if (!supabase) return { success: false, error: new Error('Supabase not configured') };
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
 
+    const res = await fetch(`${apiBase}/api/admin/products/${encodeURIComponent(productId)}`, {
+      method: 'DELETE',
+      headers: {
+        'x-admin-token': adminToken,
+      },
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) {
+        return { success: true, error: null };
+      } else if (json.error) {
+        return { success: false, error: new Error(json.error) };
+      }
+    } else {
+      const errorJson = await res.json().catch(() => ({}));
+      return { success: false, error: new Error(errorJson.error || `Server status ${res.status}`) };
+    }
+  } catch (err: any) {
+    console.warn('Backend delete product notice, attempting client fallback:', err?.message);
+  }
+
+  if (!supabase) return { success: false, error: new Error('Supabase not configured') };
   try {
     const { error } = await supabase.from('products').delete().eq('id', productId);
     if (error) {
-      console.warn('Supabase delete product notice:', error.message);
       return { success: false, error };
     }
     return { success: true, error: null };
   } catch (err: any) {
-    console.warn('Supabase delete product exception:', err);
     return { success: false, error: err };
   }
 }
@@ -422,8 +503,20 @@ export async function supabaseDeleteProduct(productId: string) {
  * Fetch categories from Supabase 'categories' table
  */
 export async function supabaseGetCategories() {
-  if (!supabase) return [];
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/api/categories`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.categories)) {
+        return json.categories;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend /api/categories fetch notice, falling back to client Supabase:', err);
+  }
 
+  if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from('categories')
@@ -442,11 +535,43 @@ export async function supabaseGetCategories() {
 }
 
 /**
- * Save or Upsert category to Supabase 'categories' table
+ * Save or Upsert category to Supabase 'categories' table via Express backend
  */
 export async function supabaseSaveCategory(categoryRecord: any) {
-  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+    const isUpdate = Boolean(categoryRecord.id);
 
+    const url = isUpdate
+      ? `${apiBase}/api/admin/categories/${encodeURIComponent(categoryRecord.id)}`
+      : `${apiBase}/api/admin/categories`;
+
+    const res = await fetch(url, {
+      method: isUpdate ? 'PUT' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(categoryRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.category) {
+        return { data: json.category, error: null };
+      } else if (json.error) {
+        return { data: null, error: new Error(json.error) };
+      }
+    } else {
+      const errorJson = await res.json().catch(() => ({}));
+      return { data: null, error: new Error(errorJson.error || `Server status ${res.status}`) };
+    }
+  } catch (err: any) {
+    console.warn('Backend save category notice, attempting client fallback:', err?.message);
+  }
+
+  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
   try {
     const { data, error } = await supabase
       .from('categories')
@@ -454,33 +579,89 @@ export async function supabaseSaveCategory(categoryRecord: any) {
       .select();
 
     if (error) {
-      console.warn('Supabase save category notice:', error.message);
       return { data: null, error };
     }
-    return { data, error: null };
+    return { data: data?.[0] || categoryRecord, error: null };
   } catch (err: any) {
-    console.warn('Supabase save category exception:', err);
     return { data: null, error: err };
   }
 }
 
 /**
- * Delete category from Supabase 'categories' table
+ * Delete category from Supabase 'categories' table via Express backend
  */
-export async function supabaseDeleteCategory(categoryId: string) {
-  if (!supabase) return { success: false, error: new Error('Supabase not configured') };
+export async function supabaseDeleteCategory(
+  categoryId: string, 
+  options?: { reassignCategoryId?: string; deleteProducts?: boolean }
+) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
 
+    const res = await fetch(`${apiBase}/api/admin/categories/${encodeURIComponent(categoryId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(options || {}),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) {
+        return { success: true, error: null };
+      } else if (json.error) {
+        return { success: false, error: new Error(json.error) };
+      }
+    } else {
+      const errorJson = await res.json().catch(() => ({}));
+      return { success: false, error: new Error(errorJson.error || `Server status ${res.status}`) };
+    }
+  } catch (err: any) {
+    console.warn('Backend delete category notice, attempting client fallback:', err?.message);
+  }
+
+  if (!supabase) return { success: false, error: new Error('Supabase not configured') };
   try {
     const { error } = await supabase.from('categories').delete().eq('id', categoryId);
     if (error) {
-      console.warn('Supabase delete category notice:', error.message);
       return { success: false, error };
     }
     return { success: true, error: null };
   } catch (err: any) {
-    console.warn('Supabase delete category exception:', err);
     return { success: false, error: err };
   }
+}
+
+/**
+ * Bulk reorder categories via Express backend
+ */
+export async function supabaseReorderCategories(categoryRecords: any[]) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const res = await fetch(`${apiBase}/api/admin/categories/reorder`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify({ categories: categoryRecords }),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) {
+        return { success: true, error: null };
+      }
+    }
+  } catch (err: any) {
+    console.warn('Backend reorder categories notice:', err?.message);
+  }
+
+  return { success: false, error: null };
 }
 
 /**

@@ -25,6 +25,7 @@ import {
   supabaseGetCategories,
   supabaseSaveCategory,
   supabaseDeleteCategory,
+  supabaseReorderCategories,
   supabaseGetReviews,
   supabaseSaveReview,
   supabaseGetAllProfiles,
@@ -1013,41 +1014,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'p-' + Date.now(),
       createdAt: new Date().toISOString().split('T')[0],
     };
-    setProducts((prev) => [newProd, ...prev]);
-    const { error } = await supabaseSaveProduct(mapFrontendProductToDb(newProd));
+    
+    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(newProd));
     if (error) {
-      showToast(`Database error: ${error.message}`, 'error');
+      showToast(`Database error: ${error.message || 'Failed to save product'}`, 'error');
     } else {
+      if (data) {
+        const mapped = mapDbProductToFrontend(data);
+        setProducts((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+      } else {
+        setProducts((prev) => [newProd, ...prev]);
+      }
       showToast(language === 'mr' ? 'नवीन उत्पादन जोडले!' : 'Product added successfully!');
     }
   };
 
   const updateProduct = async (id: string, updatedFields: Partial<Product>) => {
-    let updatedProd: Product | null = null;
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          updatedProd = { ...p, ...updatedFields };
-          return updatedProd;
-        }
-        return p;
-      })
-    );
-    if (updatedProd) {
-      const { error } = await supabaseSaveProduct(mapFrontendProductToDb(updatedProd));
-      if (error) {
-        showToast(`Database update error: ${error.message}`, 'error');
-      } else {
-        showToast(language === 'mr' ? 'उत्पादन अपडेट झाले!' : 'Product updated successfully!');
+    const existing = products.find((p) => p.id === id);
+    if (!existing) return;
+
+    const merged = { ...existing, ...updatedFields };
+    setProducts((prev) => prev.map((p) => (p.id === id ? merged : p)));
+
+    const { data, error } = await supabaseSaveProduct(mapFrontendProductToDb(merged));
+    if (error) {
+      showToast(`Database update error: ${error.message || 'Failed to update product'}`, 'error');
+    } else {
+      if (data) {
+        const mapped = mapDbProductToFrontend(data);
+        setProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
       }
+      showToast(language === 'mr' ? 'उत्पादन अपडेट झाले!' : 'Product updated successfully!');
     }
   };
 
   const deleteProduct = async (id: string) => {
+    const previousProducts = [...products];
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    const { error } = await supabaseDeleteProduct(id);
-    if (error) {
-      showToast(`Database error: ${error.message}`, 'error');
+
+    const { success, error } = await supabaseDeleteProduct(id);
+    if (!success || error) {
+      setProducts(previousProducts);
+      showToast(`Database error: ${error?.message || 'Failed to delete product'}`, 'error');
     } else {
       showToast(language === 'mr' ? 'उत्पादन हटवले' : 'Product deleted', 'info');
     }
@@ -1065,37 +1073,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
       updatedAt: now,
     };
-    setCategories((prev) => [...prev, newCat]);
-    const { error } = await supabaseSaveCategory(mapFrontendCategoryToDb(newCat));
+
+    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(newCat));
     if (error) {
-      showToast(`Database error: ${error.message}`, 'error');
+      showToast(`Database error: ${error.message || 'Failed to save category'}`, 'error');
     } else {
+      if (data) {
+        const mapped = mapDbCategoryToFrontend(data);
+        setCategories((prev) => [...prev.filter((c) => c.id !== mapped.id), mapped]);
+      } else {
+        setCategories((prev) => [...prev, newCat]);
+      }
       showToast(language === 'mr' ? 'नवीन श्रेणी यशस्वीपणे जोडली!' : 'Category created successfully!');
     }
   };
 
   const updateCategory = async (id: string, fields: Partial<Category>) => {
-    const now = new Date().toISOString().split('T')[0];
-    let updatedCat: Category | null = null;
-    setCategories((prev) =>
-      prev.map((c) => {
-        if (c.id === id) {
-          updatedCat = { ...c, ...fields, updatedAt: now };
-          return updatedCat;
-        }
-        return c;
-      })
-    );
-    if (updatedCat) {
-      await supabaseSaveCategory(mapFrontendCategoryToDb(updatedCat));
+    const existing = categories.find((c) => c.id === id);
+    if (!existing) return;
+
+    const merged = { ...existing, ...fields, updatedAt: new Date().toISOString().split('T')[0] };
+    setCategories((prev) => prev.map((c) => (c.id === id ? merged : c)));
+
+    const { data, error } = await supabaseSaveCategory(mapFrontendCategoryToDb(merged));
+    if (error) {
+      showToast(`Database update error: ${error.message || 'Failed to update category'}`, 'error');
+    } else {
+      if (data) {
+        const mapped = mapDbCategoryToFrontend(data);
+        setCategories((prev) => prev.map((c) => (c.id === id ? mapped : c)));
+      }
+      showToast(language === 'mr' ? 'श्रेणी अपडेट झाली!' : 'Category updated successfully!');
     }
-    showToast(language === 'mr' ? 'श्रेणी अपडेट झाली!' : 'Category updated successfully!');
   };
 
   const deleteCategory = async (
     id: string,
     options?: { reassignCategoryId?: string; deleteProducts?: boolean }
   ) => {
+    const previousCategories = [...categories];
+    const previousProducts = [...products];
+
     if (options?.deleteProducts) {
       setProducts((prev) => prev.filter((p) => p.categoryId !== id));
     } else if (options?.reassignCategoryId) {
@@ -1110,19 +1128,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
       }
     }
-
     setCategories((prev) => prev.filter((c) => c.id !== id));
-    await supabaseDeleteCategory(id);
-    showToast(language === 'mr' ? 'श्रेणी यशस्वीपणे हटवली' : 'Category deleted successfully', 'info');
+
+    const { success, error } = await supabaseDeleteCategory(id, options);
+    if (!success || error) {
+      setCategories(previousCategories);
+      setProducts(previousProducts);
+      showToast(`Database error: ${error?.message || 'Failed to delete category'}`, 'error');
+    } else {
+      showToast(language === 'mr' ? 'श्रेणी यशस्वीपणे हटवली' : 'Category deleted successfully', 'info');
+    }
   };
 
-  const reorderCategories = (newOrderedCategories: Category[]) => {
+  const reorderCategories = async (newOrderedCategories: Category[]) => {
     const updated = newOrderedCategories.map((c, index) => ({
       ...c,
       displayOrder: index + 1,
     }));
     setCategories(updated);
-    updated.forEach((cat) => supabaseSaveCategory(mapFrontendCategoryToDb(cat)));
+    await supabaseReorderCategories(updated.map(mapFrontendCategoryToDb));
     showToast(language === 'mr' ? 'श्रेणीचा क्रम अपडेट झाला!' : 'Category display order updated!');
   };
 

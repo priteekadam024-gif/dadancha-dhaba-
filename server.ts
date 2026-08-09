@@ -372,22 +372,280 @@ async function startServer() {
     }
   });
 
-  // Other e-commerce APIs
-  app.get('/api/products', (_req, res) => res.json({ success: true, products: mockProducts }));
-  app.post('/api/products', (req, res) => {
-    const newProd = { id: 'prod-' + Date.now(), ...req.body };
-    mockProducts.push(newProd as any);
-    res.json({ success: true, product: newProd });
-  });
-  app.delete('/api/products/:id', (req, res) => res.json({ success: true, message: `Product ${req.params.id} deleted` }));
+  // Products API Endpoints
+  app.get('/api/products', async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  app.get('/api/categories', (_req, res) => res.json({
-    success: true,
-    categories: [
-      { id: 'spices', nameEn: 'Traditional Spices', nameMr: 'गावरान मसाले' },
-      { id: 'cookware', nameEn: 'Brass & Copper', nameMr: 'पितळी व तांब्याची भांडी' }
-    ]
-  }));
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message, products: [] });
+      }
+      return res.json({ success: true, products: data || [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message, products: [] });
+    }
+  });
+
+  app.post('/api/admin/products', requireAdminAuth, async (req, res) => {
+    try {
+      const productPayload = req.body;
+      if (!productPayload || (!productPayload.name_en && !productPayload.nameEn)) {
+        return res.status(400).json({ success: false, error: 'Product name (English) is required' });
+      }
+
+      if (!productPayload.id) {
+        productPayload.id = 'p-' + Date.now();
+      }
+      productPayload.created_at = productPayload.created_at || new Date().toISOString();
+      productPayload.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('products')
+        .upsert([productPayload], { onConflict: 'id' })
+        .select();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, product: data?.[0] || productPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/products', requireAdminAuth, async (req, res) => {
+    try {
+      const productPayload = req.body;
+      if (!productPayload.id) {
+        productPayload.id = 'p-' + Date.now();
+      }
+      productPayload.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('products')
+        .upsert([productPayload], { onConflict: 'id' })
+        .select();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, product: data?.[0] || productPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/admin/products/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const productPayload = { ...req.body, id, updated_at: new Date().toISOString() };
+
+      const { data, error } = await supabase
+        .from('products')
+        .update(productPayload)
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, product: data?.[0] || productPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/products/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const { data: existingProducts } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id);
+
+      const targetProduct = existingProducts?.[0];
+      if (targetProduct && Array.isArray(targetProduct.images)) {
+        for (const imgUrl of targetProduct.images) {
+          if (typeof imgUrl === 'string' && imgUrl.includes('supabase.co/storage/v1/object/public/')) {
+            try {
+              const urlObj = new URL(imgUrl);
+              const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
+              if (pathParts[1]) {
+                const [bucket, ...filePathParts] = pathParts[1].split('/');
+                const filePath = filePathParts.join('/');
+                if (bucket && filePath) {
+                  await supabase.storage.from(bucket).remove([filePath]);
+                }
+              }
+            } catch (e) {
+              console.warn('Could not parse or remove image storage file:', imgUrl);
+            }
+          }
+        }
+      }
+
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      return res.json({ success: true, message: `Product ${id} deleted successfully` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/products/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, message: `Product ${id} deleted successfully` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Categories API Endpoints
+  app.get('/api/categories', async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message, categories: [] });
+      }
+      return res.json({ success: true, categories: data || [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message, categories: [] });
+    }
+  });
+
+  app.post('/api/admin/categories', requireAdminAuth, async (req, res) => {
+    try {
+      const categoryPayload = req.body;
+      if (!categoryPayload || (!categoryPayload.name_en && !categoryPayload.nameEn)) {
+        return res.status(400).json({ success: false, error: 'Category name (English) is required' });
+      }
+
+      if (!categoryPayload.id) {
+        categoryPayload.id = categoryPayload.slug || ('cat-' + Date.now());
+      }
+      categoryPayload.created_at = categoryPayload.created_at || new Date().toISOString();
+      categoryPayload.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('categories')
+        .upsert([categoryPayload], { onConflict: 'id' })
+        .select();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, category: data?.[0] || categoryPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/admin/categories/reorder', requireAdminAuth, async (req, res) => {
+    try {
+      const { categories: orderedCategories } = req.body || {};
+      if (!Array.isArray(orderedCategories)) {
+        return res.status(400).json({ success: false, error: 'Categories array is required' });
+      }
+
+      for (let i = 0; i < orderedCategories.length; i++) {
+        const cat = orderedCategories[i];
+        if (cat.id) {
+          await supabase
+            .from('categories')
+            .update({ display_order: i + 1, updated_at: new Date().toISOString() })
+            .eq('id', cat.id);
+        }
+      }
+
+      return res.json({ success: true, message: 'Categories reordered successfully' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/admin/categories/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const categoryPayload = { ...req.body, id, updated_at: new Date().toISOString() };
+
+      const { data, error } = await supabase
+        .from('categories')
+        .update(categoryPayload)
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, category: data?.[0] || categoryPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/categories/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reassignCategoryId, deleteProducts } = req.body || {};
+
+      const { data: catProducts } = await supabase
+        .from('products')
+        .select('id, category_id, category')
+        .or(`category_id.eq.${id},category.eq.${id}`);
+
+      if (catProducts && catProducts.length > 0) {
+        if (reassignCategoryId) {
+          const { data: targetCats } = await supabase
+            .from('categories')
+            .select('*')
+            .eq('id', reassignCategoryId);
+
+          const targetCat = targetCats?.[0];
+          const targetName = targetCat?.name_en || reassignCategoryId;
+
+          await supabase
+            .from('products')
+            .update({ category_id: reassignCategoryId, category: targetName, updated_at: new Date().toISOString() })
+            .or(`category_id.eq.${id},category.eq.${id}`);
+        } else if (deleteProducts) {
+          await supabase
+            .from('products')
+            .delete()
+            .or(`category_id.eq.${id},category.eq.${id}`);
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: `Category contains ${catProducts.length} product(s). Please specify reassignCategoryId or deleteProducts.`
+          });
+        }
+      }
+
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      return res.json({ success: true, message: `Category ${id} deleted successfully` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   app.get('/api/orders', (_req, res) => res.json({ success: true, orders: mockOrders }));
   app.post('/api/orders', (req, res) => {
