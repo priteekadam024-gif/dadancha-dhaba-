@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from '../components/DhabaLogo';
-import { User, Mail, Lock, Phone, UserPlus, Database, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Mail, Lock, Phone, UserPlus, Database, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { supabaseSignUp, isSupabaseConfigured } from '../lib/supabase';
 
 export const RegisterPage: React.FC = () => {
@@ -11,6 +11,8 @@ export const RegisterPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -141,14 +143,22 @@ export const RegisterPage: React.FC = () => {
             </label>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-3 py-3 rounded-xl border border-zinc-700"
+                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-10 py-3 rounded-xl border border-zinc-700"
               />
               <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 p-1 text-zinc-400 hover:text-white transition-colors focus:outline-none"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -158,14 +168,22 @@ export const RegisterPage: React.FC = () => {
             </label>
             <div className="relative">
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-3 py-3 rounded-xl border border-zinc-700"
+                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-10 py-3 rounded-xl border border-zinc-700"
               />
               <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-2.5 p-1 text-zinc-400 hover:text-white transition-colors focus:outline-none"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

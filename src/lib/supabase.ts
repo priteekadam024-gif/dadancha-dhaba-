@@ -601,10 +601,11 @@ export async function supabaseGetSiteSettings() {
     const { data, error } = await supabase
       .from('site_settings')
       .select('*')
-      .eq('id', 'global')
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.warn('Error fetching site_settings:', error.message);
     }
     return data || null;
@@ -621,35 +622,43 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
   if (!supabase) return { data: null, error: new Error('Supabase not configured') };
 
   try {
-    // Sanitize history and URLs if they contain large base64 data to avoid network payload size limits
-    const sanitizedHistory = Array.isArray(settingsRecord.history)
-      ? settingsRecord.history.map((h: any) => ({
-          ...h,
-          logoUrl: (h.logoUrl && h.logoUrl.startsWith('data:') && h.logoUrl.length > 50000)
-            ? '/assets/dadacha-dhaba-logo.png'
-            : h.logoUrl,
-          faviconUrl: (h.faviconUrl && h.faviconUrl.startsWith('data:') && h.faviconUrl.length > 50000)
-            ? '/assets/dadacha-dhaba-logo.png'
-            : h.faviconUrl,
-        }))
-      : [];
+    const existing = await supabaseGetSiteSettings();
 
-    const record = {
-      id: 'global',
-      ...settingsRecord,
-      history: sanitizedHistory,
+    const recordPayload: Record<string, any> = {
+      site_name: settingsRecord.site_name || 'Dadacha Dhaba',
+      logo_url: settingsRecord.logo_url || null,
+      logo_storage_path: settingsRecord.logo_storage_path || null,
+      favicon_url: settingsRecord.favicon_url || null,
+      favicon_storage_path: settingsRecord.favicon_storage_path || null,
+      og_image_url: settingsRecord.og_image_url || null,
+      og_image_storage_path: settingsRecord.og_image_storage_path || null,
+      use_global_logo_for_header: settingsRecord.use_global_logo_for_header ?? true,
+      use_global_logo_for_footer: settingsRecord.use_global_logo_for_footer ?? true,
+      use_global_logo_for_login: settingsRecord.use_global_logo_for_login ?? true,
+      use_global_logo_for_admin: settingsRecord.use_global_logo_for_admin ?? true,
+      use_global_logo_for_invoice: settingsRecord.use_global_logo_for_invoice ?? true,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('site_settings')
-      .upsert(record, { onConflict: 'id' });
-
-    if (error) {
-      console.warn('Supabase site_settings save notice:', error.message);
-      return { data: null, error };
+    let result;
+    if (existing?.id) {
+      result = await supabase
+        .from('site_settings')
+        .update(recordPayload)
+        .eq('id', existing.id)
+        .select();
+    } else {
+      result = await supabase
+        .from('site_settings')
+        .insert([recordPayload])
+        .select();
     }
-    return { data, error: null };
+
+    if (result.error) {
+      console.warn('Supabase site_settings save notice:', result.error.message);
+      return { data: null, error: result.error };
+    }
+    return { data: result.data?.[0], error: null };
   } catch (err: any) {
     console.warn('Supabase site_settings save fetch warning:', err?.message || err);
     return { data: null, error: err };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { ProductCard } from '../components/ProductCard';
 import { LatestReelsSection } from '../components/LatestReelsSection';
+import { OfficialLogo } from '../components/OfficialLogo';
 import { 
   ShoppingBag, Video, Flame, Sparkles, Award, ShieldCheck, 
   Truck, ArrowRight, Star, Heart, Play, Clock, ChevronRight, 
@@ -127,20 +128,8 @@ export const HomePage: React.FC = () => {
           {/* Right Brand Showcase Badge */}
           <div className="lg:col-span-5 relative">
             <div className="relative bg-gradient-to-br from-[#1E1E1E] via-[#161616] to-[#111111] p-8 rounded-3xl border border-[#F4B400]/40 shadow-2xl space-y-6 text-center">
-              <div className="w-24 h-24 mx-auto rounded-3xl bg-[#F4B400]/10 border-2 border-[#F4B400] p-3 shadow-xl">
-                <img
-                  src="/assets/dadacha-dhaba-logo.png"
-                  alt="Dadacha Dhaba Brand"
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.dataset.fallbackApplied) {
-                      target.dataset.fallbackApplied = 'true';
-                      target.src = '/assets/dadacha-dhaba-logo.png';
-                    }
-                  }}
-                />
-                <Utensils className="w-12 h-12 text-[#F4B400] mx-auto my-3" />
+              <div className="mx-auto flex justify-center">
+                <OfficialLogo variant="icon" size="hero" clickable />
               </div>
 
               <div className="space-y-2">

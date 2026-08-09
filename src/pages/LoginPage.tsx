@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from '../components/DhabaLogo';
-import { Mail, Lock, LogIn, Database, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, Database, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { supabaseSignIn, isSupabaseConfigured } from '../lib/supabase';
 
 export const LoginPage: React.FC = () => {
   const { language, loginUser, navigateTo, showToast } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -108,14 +109,22 @@ export const LoginPage: React.FC = () => {
             </div>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-3 py-3 rounded-xl border border-zinc-700 focus:outline-none focus:border-[#F4B400]"
+                className="w-full bg-[#1A1A1A] text-white text-xs pl-9 pr-10 py-3 rounded-xl border border-zinc-700 focus:outline-none focus:border-[#F4B400]"
               />
               <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 p-1 text-zinc-400 hover:text-white transition-colors focus:outline-none"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

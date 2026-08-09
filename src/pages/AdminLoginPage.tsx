@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from '../components/DhabaLogo';
-import { Lock, ShieldAlert, Mail } from 'lucide-react';
+import { Lock, ShieldAlert, Mail, Eye, EyeOff } from 'lucide-react';
 
 export const AdminLoginPage: React.FC = () => {
   const { language, adminLogin, loginAdmin, navigateTo } = useApp();
   const [email, setEmail] = useState('admin@dadachadhaba.com');
   const [passcode, setPasscode] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAdminAuth = (e: React.FormEvent) => {
@@ -59,14 +60,22 @@ export const AdminLoginPage: React.FC = () => {
             </label>
             <div className="relative">
               <input
-                type="password"
+                type={showPasscode ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                className="w-full bg-[#1A1A1A] text-white font-mono text-center text-lg tracking-widest py-3.5 rounded-2xl border border-zinc-700 focus:outline-none focus:border-[#F4B400]"
+                className="w-full bg-[#1A1A1A] text-white font-mono text-center text-lg tracking-widest pl-10 pr-10 py-3.5 rounded-2xl border border-zinc-700 focus:outline-none focus:border-[#F4B400]"
               />
               <Lock className="w-5 h-5 text-[#F4B400] absolute left-4 top-4" />
+              <button
+                type="button"
+                onClick={() => setShowPasscode(!showPasscode)}
+                className="absolute right-4 top-3.5 p-1 text-zinc-400 hover:text-white transition-colors focus:outline-none"
+                aria-label={showPasscode ? 'Hide password' : 'Show password'}
+              >
+                {showPasscode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 

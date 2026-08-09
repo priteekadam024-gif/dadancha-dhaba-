@@ -5,7 +5,8 @@ import { OfficialLogo } from '../components/OfficialLogo';
 import { 
   User as UserIcon, Package, MapPin, Heart, ShoppingBag, Settings, LogOut, 
   Printer, Plus, ShieldCheck, CheckCircle2, Edit3, Trash2, KeyRound, 
-  Bell, Smartphone, Mail, Lock, Sparkles, ExternalLink, RefreshCw, X, ArrowRight
+  Bell, Smartphone, Mail, Lock, Sparkles, ExternalLink, RefreshCw, X, ArrowRight,
+  Eye, EyeOff
 } from 'lucide-react';
 import { Address } from '../types';
 
@@ -48,6 +49,8 @@ export const UserDashboardPage: React.FC = () => {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
 
   if (!currentUser) {
@@ -885,26 +888,46 @@ export const UserDashboardPage: React.FC = () => {
             <form onSubmit={handleChangePassword} className="space-y-3 text-xs">
               <div>
                 <label className="text-zinc-300 block mb-1 font-semibold">New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="At least 6 characters"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-[#1A1A1A] text-white p-2.5 rounded-xl border border-zinc-700"
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    placeholder="At least 6 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-[#1A1A1A] text-white p-2.5 pr-10 rounded-xl border border-zinc-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                    aria-label={showNewPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="text-zinc-300 block mb-1 font-semibold">Confirm New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Re-type new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-[#1A1A1A] text-white p-2.5 rounded-xl border border-zinc-700"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    required
+                    placeholder="Re-type new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-[#1A1A1A] text-white p-2.5 pr-10 rounded-xl border border-zinc-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                    aria-label={showConfirmPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <button
