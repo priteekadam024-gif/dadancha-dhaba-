@@ -155,6 +155,7 @@ export function mapDbOrderToFrontend(row: any): Order {
 
   return {
     id: String(row.id),
+    userId: row.user_id || undefined,
     orderNumber: row.order_number || row.orderNumber || `DD-${row.id}`,
     date: row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
     userName: row.user_name || row.customer_name || address.name || 'Customer',

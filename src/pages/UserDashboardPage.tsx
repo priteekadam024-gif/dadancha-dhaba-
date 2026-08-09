@@ -78,7 +78,7 @@ export const UserDashboardPage: React.FC = () => {
   }
 
   // Filter user orders
-  const userOrders = orders.filter((o) => o.userEmail.toLowerCase() === currentUser.email.toLowerCase() || o.userName === currentUser.name);
+  const userOrders = orders.filter((o) => (o.userId && o.userId === currentUser.id) || (o.userEmail && o.userEmail.toLowerCase() === currentUser.email.toLowerCase()));
   const filteredOrders = userOrders.filter((o) => orderFilter === 'all' || o.orderStatus === orderFilter);
 
   // Filter wishlist products

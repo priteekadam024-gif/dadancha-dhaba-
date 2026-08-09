@@ -48,22 +48,7 @@ async function startServer() {
     });
   };
 
-  // Mock DB for products / orders
-  const mockProducts = [
-    { id: 'mas-1', nameEn: 'Kanda Lasun Masala', nameMr: 'कांदा लसूण मसाला', price: 220, category: 'spices', stock: 45 },
-    { id: 'mas-2', nameEn: 'Goda Masala', nameMr: 'गोडा मसाला', price: 180, category: 'spices', stock: 32 },
-    { id: 'brass-1', nameEn: 'Brass Kalai Handi', nameMr: 'पितळी कलई हांडी', price: 1450, category: 'cookware', stock: 12 }
-  ];
 
-  const mockOrders = [
-    { id: 'ORD-1001', customerName: 'Pritee Kadam', totalAmount: 890, status: 'delivered', createdAt: '2026-08-01' },
-    { id: 'ORD-1002', customerName: 'Rahul Shinde', totalAmount: 450, status: 'processing', createdAt: '2026-08-04' }
-  ];
-
-  const mockCustomers = [
-    { id: 'usr-1', name: 'Pritee Kadam', email: 'pritee@example.com', phone: '+91 98220 12345', status: 'active' },
-    { id: 'usr-2', name: 'Rahul Shinde', email: 'rahul@example.com', phone: '+91 98220 54321', status: 'active' }
-  ];
 
   // API Endpoints
   app.get('/api/health', (_req, res) => {
@@ -100,7 +85,7 @@ async function startServer() {
   });
 
   app.get('/api/auth/profile', (_req, res) => {
-    res.json({ success: true, profile: mockCustomers[0] });
+    res.json({ success: true, profile: null });
   });
 
   app.put('/api/auth/profile', (req, res) => {
@@ -645,13 +630,42 @@ async function startServer() {
     }
   });
 
-  app.get('/api/orders', (_req, res) => res.json({ success: true, orders: mockOrders }));
-  app.post('/api/orders', (req, res) => {
-    const newOrder = { id: 'ORD-' + Math.floor(1000 + Math.random() * 9000), ...req.body };
-    res.json({ success: true, order: newOrder });
+  app.get('/api/orders', async (_req, res) => {
+    try {
+      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, orders: data || [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
   });
 
-  app.get('/api/customers', (_req, res) => res.json({ success: true, customers: mockCustomers }));
+  app.post('/api/orders', async (req, res) => {
+    try {
+      const orderPayload = req.body;
+      const { data, error } = await supabase.from('orders').upsert([orderPayload], { onConflict: 'id' }).select();
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, order: data?.[0] || orderPayload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/customers', async (_req, res) => {
+    try {
+      const { data, error } = await supabase.from('user_profiles').select('*').order('created_at', { ascending: false });
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, customers: data || [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
   app.get('/api/analytics', (_req, res) => res.json({
     success: true,
     totalRevenue: 245800,

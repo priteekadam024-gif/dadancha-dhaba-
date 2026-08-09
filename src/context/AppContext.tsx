@@ -294,6 +294,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Current Auth User State (Default null, loaded via Supabase Auth session)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('dd_admin_logged_in') === 'true';
@@ -469,13 +470,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     fetchDatabaseData();
 
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      setIsAuthChecking(false);
+      return;
+    }
 
     // Fetch initial auth session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        loadSupabaseUserSession(session.user);
+        loadSupabaseUserSession(session.user).finally(() => setIsAuthChecking(false));
+      } else {
+        setIsAuthChecking(false);
       }
+    }).catch(() => {
+      setIsAuthChecking(false);
     });
 
     // Listen to Auth State Changes
@@ -602,7 +610,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let targetPage = page;
       let targetTab = tab;
 
-      if ((targetPage === 'account' || targetPage === 'orders') && !currentUser) {
+      if ((targetPage === 'account' || targetPage === 'orders') && !currentUser && !isAuthChecking) {
         targetPage = 'login';
         targetTab = '';
       }
@@ -624,7 +632,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     handleLocationChange();
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
-  }, [currentUser, isAdminLoggedIn]);
+  }, [currentUser, isAdminLoggedIn, isAuthChecking]);
 
   /**
    * User Login via Supabase Auth
@@ -945,8 +953,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         discountAmount = appliedCoupon.value;
       }
     }
-    const shippingFee = subtotal > 499 ? 0 : 50;
-    const gstAmount = Math.round(((subtotal - discountAmount) * 0.05));
+    const shippingFee = subtotal > 499 || cart.length === 0 ? 0 : 50;
+    const gstAmount = 0; // Tax included in subtotal
     const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
 
     const newOrder: Order = {

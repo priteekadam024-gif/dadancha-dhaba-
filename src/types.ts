@@ -137,6 +137,7 @@ export type OrderStatus = 'placed' | 'processing' | 'shipped' | 'out_for_deliver
 
 export interface Order {
   id: string;
+  userId?: string;
   orderNumber: string;
   date: string;
   userName: string;
