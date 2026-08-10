@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from '../components/DhabaLogo';
 import { Mail, Lock, LogIn, Database, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { supabaseSignIn, isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export const LoginPage: React.FC = () => {
   const { language, loginUser, navigateTo, showToast } = useApp();
@@ -14,31 +14,21 @@ export const LoginPage: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMessage('');
     
-    if (!email) return;
-
-    if (isSupabaseConfigured) {
-      setLoading(true);
-      const { data, error } = await supabaseSignIn(email, password);
-      setLoading(false);
-
-      if (error) {
-        setErrorMessage(error.message);
-        showToast(language === 'mr' ? `लॉगिन त्रुटी: ${error.message}` : `Login failed: ${error.message}`);
-        return;
-      }
-
-      if (data?.user) {
-        showToast(language === 'mr' ? 'Supabase द्वारे यशस्वी लॉगिन झाले!' : 'Logged in successfully via Supabase!');
-        loginUser(data.user.email || email);
-        return;
-      }
+    if (!email || !password) {
+      setErrorMessage(language === 'mr' ? 'कृपया ई-मेल आणि पासवर्ड प्रविष्ट करा.' : 'Please enter your email and password.');
+      return;
     }
 
-    // Default seamless login flow
-    showToast(language === 'mr' ? 'खात्यात यशस्वीरित्या लॉगिन झाले!' : 'Successfully logged in!');
-    loginUser(email);
+    setLoading(true);
+    const result = await loginUser(email, password);
+    setLoading(false);
+
+    if (!result.success && result.message) {
+      setErrorMessage(result.message);
+    }
   };
 
   return (

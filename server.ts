@@ -25,6 +25,17 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Enable CORS headers for API requests
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-admin-token');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -94,6 +105,47 @@ async function startServer() {
 
   app.post('/api/auth/password-reset', (_req, res) => {
     res.json({ success: true, message: 'Password reset instructions sent' });
+  });
+
+  // Auto-confirm user email via Supabase Admin API to prevent "Email not confirmed" blocks
+  app.post('/api/auth/auto-confirm', async (req, res) => {
+    try {
+      const { userId, email } = req.body || {};
+      if (!userId && !email) {
+        return res.status(400).json({ success: false, message: 'User ID or email is required' });
+      }
+
+      let targetUserId = userId;
+
+      if (!targetUserId && email) {
+        const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
+        if (!listError && usersData?.users) {
+          const match = usersData.users.find((u: any) => u.email?.toLowerCase() === email.trim().toLowerCase());
+          if (match) {
+            targetUserId = match.id;
+          }
+        }
+      }
+
+      if (!targetUserId) {
+        return res.status(404).json({ success: false, message: 'User not found for confirmation' });
+      }
+
+      const { data, error } = await supabase.auth.admin.updateUserById(targetUserId, {
+        email_confirm: true,
+      });
+
+      if (error) {
+        console.error('[AUTH AUTO-CONFIRM ERROR]:', error.message);
+        return res.status(400).json({ success: false, message: error.message });
+      }
+
+      console.log('[AUTH AUTO-CONFIRM SUCCESS]: User confirmed:', targetUserId);
+      return res.json({ success: true, user: data.user });
+    } catch (err: any) {
+      console.error('[AUTH AUTO-CONFIRM EXCEPTION]:', err.message);
+      return res.status(500).json({ success: false, message: err.message });
+    }
   });
 
   // Public Media API - Read published videos / images

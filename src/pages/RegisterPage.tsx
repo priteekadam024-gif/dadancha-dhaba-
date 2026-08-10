@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from '../components/DhabaLogo';
 import { User, Mail, Lock, Phone, UserPlus, Database, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { supabaseSignUp, isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export const RegisterPage: React.FC = () => {
-  const { language, registerUser, loginUser, navigateTo, showToast } = useApp();
+  const { language, registerUser, navigateTo, showToast } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -18,35 +18,30 @@ export const RegisterPage: React.FC = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMessage('');
-    if (!email || !name || !password) return;
+
+    if (!email || !name || !password) {
+      setErrorMessage(language === 'mr' ? 'कृपया सर्व आवश्यक माहिती प्रविष्ट करा.' : 'Please fill in all required fields.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage(language === 'mr' ? 'पासवर्ड किमान ६ अक्षरांचा असणे आवश्यक आहे.' : 'Password must be at least 6 characters long.');
+      return;
+    }
 
     if (password !== confirmPassword) {
       setErrorMessage(language === 'mr' ? 'पासवर्ड जुळत नाहीत!' : 'Passwords do not match!');
       return;
     }
 
-    if (isSupabaseConfigured) {
-      setLoading(true);
-      const { data, error } = await supabaseSignUp(email, password, name, phone);
-      setLoading(false);
+    setLoading(true);
+    const result = await registerUser(name, email, phone, password);
+    setLoading(false);
 
-      if (error) {
-        setErrorMessage(error.message);
-        showToast(language === 'mr' ? `नोंदणी त्रुटी: ${error.message}` : `Registration failed: ${error.message}`, 'error');
-        return;
-      }
-
-      if (data?.user) {
-        showToast(language === 'mr' ? 'Supabase मध्ये खाते व प्रोफाइल तयार झाले!' : 'Account & profile saved in Supabase!');
-        registerUser(name, email, phone, password);
-        return;
-      }
-    }
-
-    const success = registerUser(name, email, phone, password);
-    if (!success) {
-      setErrorMessage(language === 'mr' ? 'या ईमेलसह आधीच खाते आहे.' : 'An account with this email already exists.');
+    if (!result.success && result.message) {
+      setErrorMessage(result.message);
     }
   };
 

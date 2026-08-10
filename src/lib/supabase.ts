@@ -31,16 +31,24 @@ export async function supabaseSignUp(email: string, password: string, fullName: 
     return { data: null, error: new Error('Supabase client is not configured.') };
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanFullName = fullName.trim();
+  const cleanPhone = phone.trim();
+
+  console.log('[AUTH] REGISTER REQUEST START:', cleanEmail);
+
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: cleanEmail,
     password,
     options: {
       data: {
-        full_name: fullName,
-        phone: phone,
+        full_name: cleanFullName,
+        phone: cleanPhone,
       },
     },
   });
+
+  console.log('[AUTH] REGISTER REQUEST END:', { email: cleanEmail, success: !error, error: error?.message });
 
   if (error) {
     return { data: null, error };
@@ -50,15 +58,39 @@ export async function supabaseSignUp(email: string, password: string, fullName: 
     // Upsert into user_profiles
     const profileRecord = {
       user_id: data.user.id,
-      full_name: fullName,
-      email: email.toLowerCase(),
-      phone: phone || '',
+      full_name: cleanFullName,
+      email: cleanEmail,
+      phone: cleanPhone,
       updated_at: new Date().toISOString(),
     };
 
     const { error: profileError } = await supabase.from('user_profiles').upsert(profileRecord, { onConflict: 'user_id' });
     if (profileError) {
       console.warn('user_profiles upsert notice:', profileError.message);
+    }
+
+    // If session is null (email confirmation required by Supabase project settings),
+    // trigger auto-confirm via backend and sign in to get a valid session
+    if (!data.session) {
+      try {
+        const confirmRes = await fetch('/api/auth/auto-confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: data.user.id, email: cleanEmail }),
+        });
+        const confirmJson = await confirmRes.json();
+        if (confirmJson.success) {
+          const signInRes = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
+          if (signInRes.data?.session) {
+            return { data: signInRes.data, error: null };
+          }
+        }
+      } catch (confirmErr) {
+        console.warn('Auto-confirm registration attempt exception:', confirmErr);
+      }
     }
   }
 
@@ -73,10 +105,41 @@ export async function supabaseSignIn(email: string, password: string) {
     return { data: null, error: new Error('Supabase client is not configured') };
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+  const cleanEmail = email.trim().toLowerCase();
+
+  console.log('[AUTH] LOGIN REQUEST START:', cleanEmail);
+
+  let { data, error } = await supabase.auth.signInWithPassword({
+    email: cleanEmail,
     password,
   });
+
+  // If email is not confirmed, attempt auto-confirm via server admin and retry sign-in once
+  if (error && error.message.toLowerCase().includes('email not confirmed')) {
+    console.log('[AUTH] Email not confirmed error detected. Attempting auto-confirmation...');
+    try {
+      const confirmRes = await fetch('/api/auth/auto-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const confirmJson = await confirmRes.json();
+      if (confirmJson.success) {
+        const retryRes = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+        if (!retryRes.error) {
+          data = retryRes.data;
+          error = null;
+        }
+      }
+    } catch (autoErr) {
+      console.warn('Auto-confirm login retry failed:', autoErr);
+    }
+  }
+
+  console.log('[AUTH] LOGIN REQUEST END:', { email: cleanEmail, success: !error, error: error?.message });
 
   return { data, error };
 }

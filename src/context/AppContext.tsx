@@ -85,10 +85,11 @@ interface AppContextType {
 
   // User & Auth State
   currentUser: User | null;
+  isAuthChecking: boolean;
   allUsers: User[];
   isAdminLoggedIn: boolean;
-  loginUser: (email: string, password?: string) => Promise<boolean>;
-  registerUser: (name: string, email: string, phone: string, password?: string) => Promise<boolean>;
+  loginUser: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  registerUser: (name: string, email: string, phone: string, password?: string) => Promise<{ success: boolean; message?: string }>;
   resetUserPassword: (email: string) => Promise<{ success: boolean; message?: string }>;
   changeUserPassword: (newPassword: string) => Promise<{ success: boolean; message?: string }>;
   logoutUser: () => Promise<void>;
@@ -422,6 +423,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const addressesData = await supabaseGetUserAddresses(authUser.id);
       const ordersData = await supabaseGetOrders(authUser.id);
 
+      if (!profile && authUser.id) {
+        await supabaseUpdateUserProfile(authUser.id, {
+          full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email?.toLowerCase(),
+          phone: authUser.user_metadata?.phone || '',
+        });
+      }
+
       const mappedAddresses: Address[] = addressesData.map((a: any) => ({
         id: a.id,
         name: a.name,
@@ -637,45 +646,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   /**
    * User Login via Supabase Auth
    */
-  const loginUser = async (email: string, password?: string): Promise<boolean> => {
+  const loginUser = async (email: string, password?: string): Promise<{ success: boolean; message?: string }> => {
     if (isSupabaseConfigured && password) {
       const { data, error } = await supabaseSignIn(email, password);
       if (error) {
-        showToast(language === 'mr' ? `लॉगिन त्रुटी: ${error.message}` : `Login failed: ${error.message}`, 'error');
-        return false;
+        let msg = error.message;
+        if (msg.toLowerCase().includes('invalid login credentials')) {
+          msg = language === 'mr' ? 'अवैध ई-मेल किंवा पासवर्ड.' : 'Invalid email or password.';
+        } else if (msg.toLowerCase().includes('email not confirmed')) {
+          msg = language === 'mr' ? 'ई-मेलची पुष्टी झालेली नाही. कृपया आपला इनबॉक्स तपासा.' : 'Email address not confirmed yet. Please check your email inbox to verify.';
+        } else if (msg.includes('57 seconds') || msg.includes('security purposes') || msg.includes('rate limit')) {
+          msg = language === 'mr' ? 'अतिसंबंधित प्रयत्न. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा.' : 'Too many login attempts. Please wait a moment and try again.';
+        }
+        showToast(msg, 'error');
+        return { success: false, message: msg };
       }
       if (data?.user) {
         await loadSupabaseUserSession(data.user);
         showToast(language === 'mr' ? `पुन्हा स्वागत आहे! 👋` : `Welcome back! 👋`);
         navigateTo('account');
-        return true;
+        return { success: true };
       }
     }
 
-    showToast(language === 'mr' ? 'लॉगिन अयशस्वी. कृपया ई-मेल आणि पासवर्ड तपासा.' : 'Login failed. Please check your credentials.', 'error');
-    return false;
+    const msg = language === 'mr' ? 'लॉगिन अयशस्वी. कृपया ई-मेल आणि पासवर्ड तपासा.' : 'Login failed. Please check your credentials.';
+    showToast(msg, 'error');
+    return { success: false, message: msg };
   };
 
   /**
    * User Registration via Supabase Auth
    */
-  const registerUser = async (name: string, email: string, phone: string, password?: string): Promise<boolean> => {
+  const registerUser = async (name: string, email: string, phone: string, password?: string): Promise<{ success: boolean; message?: string }> => {
     if (isSupabaseConfigured && password) {
       const { data, error } = await supabaseSignUp(email, password, name, phone);
       if (error) {
-        showToast(language === 'mr' ? `नोंदणी त्रुटी: ${error.message}` : `Registration failed: ${error.message}`, 'error');
-        return false;
+        let msg = error.message;
+        if (msg.includes('57 seconds') || msg.includes('security purposes') || msg.includes('rate limit')) {
+          msg = language === 'mr'
+            ? 'अतिसंबंधित प्रयत्न. सुरक्षेसाठी कृपया थोड्या वेळाने पुन्हा प्रयत्न करा.'
+            : 'Too many registration attempts. For security purposes, please wait a moment and try again.';
+        } else if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+          msg = language === 'mr'
+            ? 'या ईमेलसह आधीच खाते नोंदणीकृत आहे. कृपया लॉगिन करा.'
+            : 'An account with this email already exists. Please login instead.';
+        }
+        showToast(msg, 'error');
+        return { success: false, message: msg };
       }
+
       if (data?.user) {
-        await loadSupabaseUserSession(data.user);
-        showToast(language === 'mr' ? 'खाते व प्रोफाइल Supabase मध्ये यशस्वीरित्या तयार झाले! 🎉' : 'Account & profile created in Supabase! 🎉');
-        navigateTo('account');
-        return true;
+        if (data.session) {
+          await loadSupabaseUserSession(data.user);
+          showToast(language === 'mr' ? 'खाते व प्रोफाइल Supabase मध्ये यशस्वीरित्या तयार झाले! 🎉' : 'Account & profile created in Supabase! 🎉');
+          navigateTo('account');
+        } else {
+          showToast(language === 'mr' ? 'खाते तयार झाले! कृपया नोंदणी पूर्ण करण्यासाठी आपला ईमेल तपासा.' : 'Account created! Please check your email to confirm registration or log in.', 'info');
+          navigateTo('login');
+        }
+        return { success: true };
       }
     }
 
-    showToast(language === 'mr' ? 'नोंदणी अयशस्वी. कृपया पुन्हा प्रयत्न करा.' : 'Registration failed. Please try again.', 'error');
-    return false;
+    const msg = language === 'mr' ? 'नोंदणी अयशस्वी. कृपया सर्व आवश्यक माहिती भरा.' : 'Registration failed. Please enter all required fields.';
+    showToast(msg, 'error');
+    return { success: false, message: msg };
   };
 
   /**
@@ -959,6 +994,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newOrder: Order = {
       id: 'ord-' + Date.now(),
+      userId: currentUser?.id,
       orderNumber: `DD-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       date: new Date().toISOString().split('T')[0],
       userName: shippingAddress.name || currentUser?.name || 'Customer',
@@ -1450,6 +1486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchError,
         refetchData: fetchDatabaseData,
         currentUser,
+        isAuthChecking,
         allUsers,
         isAdminLoggedIn,
         loginUser,

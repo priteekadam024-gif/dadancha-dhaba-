@@ -12,7 +12,7 @@ import { Address } from '../types';
 
 export const UserDashboardPage: React.FC = () => {
   const { 
-    language, currentUser, logoutUser, orders, products, cart, wishlist,
+    language, currentUser, isAuthChecking, logoutUser, orders, products, cart, wishlist,
     updateUserProfile, updateUserNotifications, addAddress, editAddress, 
     deleteAddress, setDefaultAddress, toggleWishlist, addToCart, removeFromCart, 
     updateCartQuantity, navigateTo, showToast, changeUserPassword, activeTab: contextTab, setActiveTab: setContextTab, contactConfig
@@ -52,6 +52,17 @@ export const UserDashboardPage: React.FC = () => {
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  if (isAuthChecking) {
+    return (
+      <div className="max-w-md mx-auto py-20 px-4 text-center space-y-4">
+        <div className="w-10 h-10 border-4 border-[#F4B400] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs text-zinc-400 font-medium">
+          {language === 'mr' ? 'खात्याची माहिती लोड होत आहे...' : 'Verifying account session...'}
+        </p>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
