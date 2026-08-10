@@ -368,27 +368,77 @@ export async function supabaseGetOrders(userId?: string) {
 }
 
 /**
- * Save or submit product review to Supabase 'reviews' table
+ * Save or submit product review to Supabase 'reviews' table (verified purchase required)
  */
 export async function supabaseSaveReview(review: any) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: new Error('Supabase client not initialized') };
 
   try {
-    const { data, error } = await supabase.from('reviews').insert([
-      {
-        id: review.id || 'rev-' + Date.now(),
-        product_id: review.productId,
-        user_id: review.userId || null,
-        user_name: review.userName,
-        rating: review.rating,
-        comment: review.comment,
-        date: new Date().toISOString(),
-      }
-    ]);
-    return { data, error };
-  } catch (err) {
-    console.warn('Supabase review insert error:', err);
-    return null;
+    if (!review.userId) {
+      return { data: null, error: new Error('User login is required to post a review.') };
+    }
+
+    // Verify purchase history in orders table
+    const { data: userOrders, error: orderErr } = await supabase
+      .from('orders')
+      .select('items, order_status, status')
+      .eq('user_id', review.userId);
+
+    if (orderErr) {
+      console.warn('Error checking order history for review:', orderErr.message);
+    }
+
+    const hasPurchased = (userOrders || []).some((ord: any) => {
+      const isNotCancelled = ord.order_status !== 'cancelled' && ord.status !== 'cancelled';
+      if (!isNotCancelled) return false;
+      const items = Array.isArray(ord.items) ? ord.items : [];
+      return items.some((it: any) => (it.productId || it.product_id) === review.productId);
+    });
+
+    if (!hasPurchased) {
+      return {
+        data: null,
+        error: new Error('Review restricted: You can only review products you have purchased.')
+      };
+    }
+
+    // Check duplicate review
+    const { data: existingReviews } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('product_id', review.productId)
+      .eq('user_id', review.userId);
+
+    let result;
+    if (existingReviews && existingReviews.length > 0) {
+      result = await supabase
+        .from('reviews')
+        .update({
+          rating: Number(review.rating) || 5,
+          comment: review.comment,
+          user_name: review.userName,
+          date: new Date().toISOString()
+        })
+        .eq('id', existingReviews[0].id)
+        .select();
+    } else {
+      result = await supabase.from('reviews').insert([
+        {
+          id: review.id || 'rev-' + Date.now(),
+          product_id: review.productId,
+          user_id: review.userId,
+          user_name: review.userName,
+          rating: Number(review.rating) || 5,
+          comment: review.comment,
+          date: new Date().toISOString(),
+        }
+      ]).select();
+    }
+
+    return { data: result.data, error: result.error };
+  } catch (err: any) {
+    console.warn('Supabase review insert exception:', err);
+    return { data: null, error: err };
   }
 }
 

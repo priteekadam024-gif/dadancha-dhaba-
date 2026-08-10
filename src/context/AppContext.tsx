@@ -375,6 +375,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const mappedReviews = rawReviews.map((r: any) => ({
         id: String(r.id || 'rev-' + Math.random()),
         productId: r.product_id || '',
+        userId: r.user_id || undefined,
         userName: r.user_name || 'Customer',
         rating: Number(r.rating) || 5,
         comment: r.comment || '',
@@ -1439,19 +1440,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(language === 'mr' ? 'फोटो हटवला' : 'Photo deleted', 'info');
   };
 
-  const addReview = (revData: Omit<Review, 'id' | 'date' | 'likes'>) => {
+  const addReview = async (revData: Omit<Review, 'id' | 'date' | 'likes'>) => {
+    if (!currentUser) {
+      showToast(
+        language === 'mr' ? 'अभिप्राय नोंदवण्यासाठी कृपया लॉगिन करा' : 'Please log in to submit a review',
+        'error'
+      );
+      return;
+    }
+
+    // Verify purchase history locally from user's orders
+    const hasPurchased = orders.some((ord) => {
+      if (ord.orderStatus === 'cancelled') return false;
+      return (ord.items || []).some((it) => it.productId === revData.productId);
+    });
+
+    if (!hasPurchased) {
+      showToast(
+        language === 'mr'
+          ? 'तुम्ही हे उत्पादन खरेदी केले असल्यासच अभिप्राय देऊ शकता.'
+          : 'You can only review products you have purchased.',
+        'error'
+      );
+      return;
+    }
+
     const newRev: Review = {
       ...revData,
       id: 'rev-' + Date.now(),
+      userId: currentUser.id,
+      userName: revData.userName || currentUser.name,
       date: new Date().toISOString().split('T')[0],
+      verifiedPurchase: true,
       likes: 0,
     };
-    setReviews((prev) => [newRev, ...prev]);
-    supabaseSaveReview({
+
+    const res = await supabaseSaveReview({
       ...newRev,
-      userId: currentUser?.id
+      userId: currentUser.id,
     });
-    showToast(language === 'mr' ? 'तुमचा रिव्ह्यू नोंदवला गेला! धन्यवाद.' : 'Thank you for your review!');
+
+    if (res && res.error) {
+      showToast(res.error.message || 'Error saving review', 'error');
+      return;
+    }
+
+    setReviews((prev) => {
+      const filtered = prev.filter(
+        (r) => !(r.productId === revData.productId && (r.userId === currentUser.id || r.userName === currentUser.name))
+      );
+      return [newRev, ...filtered];
+    });
+
+    showToast(language === 'mr' ? 'तुमचा रिव्ह्यू नोंदवला गेला! धन्यवाद.' : 'Thank you for your verified review!');
   };
 
   return (

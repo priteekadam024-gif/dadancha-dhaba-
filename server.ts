@@ -409,6 +409,82 @@ async function startServer() {
     }
   });
 
+  // Verified Product Review Submission Endpoint
+  app.post('/api/reviews', async (req, res) => {
+    try {
+      const { productId, userId, userName, rating, comment } = req.body || {};
+      if (!productId || !userId || !comment) {
+        return res.status(400).json({ success: false, error: 'Product ID, User ID, and comment are required.' });
+      }
+
+      // Verify purchase in orders table
+      const { data: userOrders, error: orderErr } = await supabase
+        .from('orders')
+        .select('items, order_status, status')
+        .eq('user_id', userId);
+
+      if (orderErr) {
+        return res.status(500).json({ success: false, error: 'Failed to verify purchase status: ' + orderErr.message });
+      }
+
+      const hasPurchased = (userOrders || []).some((ord: any) => {
+        const isNotCancelled = ord.order_status !== 'cancelled' && ord.status !== 'cancelled';
+        if (!isNotCancelled) return false;
+        const items = Array.isArray(ord.items) ? ord.items : [];
+        return items.some((it: any) => (it.productId || it.product_id) === productId);
+      });
+
+      if (!hasPurchased) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Review restricted: Only customers who have purchased this product can leave a review.' 
+        });
+      }
+
+      // Check for existing review by same user for same product
+      const { data: existing } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('user_id', userId);
+
+      let result;
+      if (existing && existing.length > 0) {
+        result = await supabase
+          .from('reviews')
+          .update({
+            rating: Number(rating) || 5,
+            comment: comment,
+            user_name: userName || 'Customer',
+            date: new Date().toISOString()
+          })
+          .eq('id', existing[0].id)
+          .select();
+      } else {
+        result = await supabase
+          .from('reviews')
+          .insert([{
+            id: 'rev-' + Date.now(),
+            product_id: productId,
+            user_id: userId,
+            user_name: userName || 'Customer',
+            rating: Number(rating) || 5,
+            comment: comment,
+            date: new Date().toISOString()
+          }])
+          .select();
+      }
+
+      if (result.error) {
+        return res.status(500).json({ success: false, error: result.error.message });
+      }
+
+      return res.json({ success: true, message: 'Review saved successfully', data: result.data?.[0] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Products API Endpoints
   app.get('/api/products', async (_req, res) => {
     try {

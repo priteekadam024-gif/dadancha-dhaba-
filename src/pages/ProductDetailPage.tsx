@@ -10,7 +10,8 @@ import {
 export const ProductDetailPage: React.FC = () => {
   const { 
     language, products, selectedProductId, navigateTo, 
-    addToCart, wishlist, toggleWishlist, reviews, addReview, showToast, contactConfig 
+    addToCart, wishlist, toggleWishlist, reviews, addReview, showToast, contactConfig,
+    currentUser, orders
   } = useApp();
 
   const product = products.find((p) => p.id === selectedProductId) || products[0];
@@ -25,12 +26,36 @@ export const ProductDetailPage: React.FC = () => {
   const [deliveryEstimate, setDeliveryEstimate] = useState<string | null>(null);
 
   // New review state
-  const [newReviewName, setNewReviewName] = useState('');
+  const [newReviewName, setNewReviewName] = useState(currentUser?.name || '');
   const [newReviewComment, setNewReviewComment] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
 
   const isWishlisted = wishlist.includes(product.id);
   const productReviews = reviews.filter((r) => r.productId === product.id);
+
+  // Check if current user has purchased this product in a non-cancelled order
+  const hasPurchasedProduct = Boolean(
+    currentUser &&
+    orders.some((ord) => 
+      ord.orderStatus !== 'cancelled' &&
+      (ord.items || []).some((it) => it.productId === product.id)
+    )
+  );
+
+  // Check if user already reviewed this product
+  const existingUserReview = reviews.find(
+    (r) => r.productId === product.id && currentUser && (r.userId === currentUser.id || r.userName === currentUser.name)
+  );
+
+  React.useEffect(() => {
+    if (currentUser && (!newReviewName || newReviewName === '')) {
+      setNewReviewName(currentUser.name);
+    }
+    if (existingUserReview) {
+      setNewReviewComment(existingUserReview.comment);
+      setNewReviewRating(existingUserReview.rating);
+    }
+  }, [currentUser, existingUserReview, product.id]);
 
   const handlePincodeCheck = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +85,14 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) {
+      showToast(language === 'mr' ? 'कृपया पुनरावलोकन देण्यासाठी लॉगिन करा' : 'Please log in to submit a review', 'error');
+      return;
+    }
+    if (!hasPurchasedProduct) {
+      showToast(language === 'mr' ? 'हे उत्पादन खरेदी केल्यानंतरच अभिप्राय देता येईल' : 'Only customers who purchased this product can leave a review', 'error');
+      return;
+    }
     if (!newReviewName || !newReviewComment) {
       showToast(language === 'mr' ? 'कृपया नाव आणि अभिप्राय प्रविष्ट करा' : 'Please enter name and review', 'error');
       return;
@@ -71,8 +104,6 @@ export const ProductDetailPage: React.FC = () => {
       comment: newReviewComment,
       verifiedPurchase: true,
     });
-    setNewReviewName('');
-    setNewReviewComment('');
   };
 
   // Related Products
@@ -384,9 +415,17 @@ export const ProductDetailPage: React.FC = () => {
             <div className="space-y-4">
               {productReviews.length > 0 ? (
                 productReviews.map((rev) => (
-                  <div key={rev.id} className="bg-[#1A1A1A] p-4 rounded-2xl border border-zinc-800 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-white text-sm">{rev.userName}</span>
+                  <div key={rev.id} className="bg-[#1A1A1A] p-4 sm:p-5 rounded-2xl border border-zinc-800 space-y-2.5">
+                    <div className="flex flex-wrap justify-between items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-sm">{rev.userName}</span>
+                        {(rev.verifiedPurchase || rev.userId) && (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 px-2.5 py-0.5 rounded-full font-medium">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            {language === 'mr' ? 'सत्यप्रत खरेदीदार' : 'Verified Purchase'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-zinc-500">{rev.date}</span>
                     </div>
                     <div className="flex items-center gap-1 text-[#F4B400]">
@@ -394,7 +433,7 @@ export const ProductDetailPage: React.FC = () => {
                         <Star key={i} className="w-3.5 h-3.5 fill-[#F4B400]" />
                       ))}
                     </div>
-                    <p className="text-xs text-zinc-300 font-marathi">{rev.comment}</p>
+                    <p className="text-xs text-zinc-300 font-marathi leading-relaxed">{rev.comment}</p>
                   </div>
                 ))
               ) : (
@@ -404,47 +443,97 @@ export const ProductDetailPage: React.FC = () => {
               )}
             </div>
 
-            {/* Add Review Form */}
-            <form onSubmit={handleReviewSubmit} className="bg-[#1A1A1A] p-6 rounded-2xl border border-zinc-800 space-y-4">
-              <h4 className="font-bold text-white text-base font-marathi">
-                {language === 'mr' ? 'तुमचा अभिप्राय नोंदवा' : 'Write a Verified Review'}
-              </h4>
+            {/* Add Review Section Conditional Logic */}
+            {!currentUser ? (
+              <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-zinc-800 text-center space-y-3">
+                <ShieldCheck className="w-8 h-8 text-[#F4B400] mx-auto opacity-80" />
+                <h4 className="text-white font-bold text-sm">
+                  {language === 'mr' ? 'फक्त खरेदीदार पुनरावलोकन सबमिट करू शकतात' : 'Only Verified Buyers Can Review'}
+                </h4>
+                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                  {language === 'mr' 
+                    ? 'या उत्पादनाचा अभिप्राय नोंदवण्यासाठी कृपया लॉगिन करा आणि खरेदी करा.' 
+                    : 'Please log in with an account that has purchased this product to submit a review.'}
+                </p>
+                <button
+                  onClick={() => navigateTo('login')}
+                  className="bg-[#F4B400] text-[#111111] text-xs font-bold px-5 py-2 rounded-xl hover:bg-[#FF8C00] transition-colors mt-2"
+                >
+                  {language === 'mr' ? 'लॉगिन करा' : 'Log In to Review'}
+                </button>
+              </div>
+            ) : !hasPurchasedProduct ? (
+              <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-zinc-800 text-center space-y-3">
+                <ShieldCheck className="w-8 h-8 text-zinc-500 mx-auto" />
+                <h4 className="text-white font-bold text-sm">
+                  {language === 'mr' ? 'खरेदीनंतरच पुनरावलोकन देण्याची सोय' : 'Verified Purchase Required'}
+                </h4>
+                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                  {language === 'mr'
+                    ? `तुम्ही '${product.nameMr || product.nameEn}' हे उत्पादन ऑर्डर केले असल्यासच अभिप्राय देऊ शकता.`
+                    : `You can only review '${product.nameEn}' if you have purchased it in an order.`}
+                </p>
+                <button
+                  onClick={() => addToCart(product, 1)}
+                  className="bg-[#F4B400] text-[#111111] text-xs font-bold px-5 py-2 rounded-xl hover:bg-[#FF8C00] transition-colors"
+                >
+                  {language === 'mr' ? 'ऑर्डर करा' : 'Buy Product to Review'}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleReviewSubmit} className="bg-[#1A1A1A] p-6 rounded-2xl border border-zinc-800 space-y-4">
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <h4 className="font-bold text-white text-base font-marathi">
+                    {existingUserReview 
+                      ? (language === 'mr' ? 'तुमचा अभिप्राय अपडेट करा' : 'Update Your Verified Review')
+                      : (language === 'mr' ? 'तुमचा अभिप्राय नोंदवा' : 'Write a Verified Review')}
+                  </h4>
+                  <span className="inline-flex items-center gap-1 text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-1 rounded-full font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {language === 'mr' ? 'सत्यप्रत खरेदीदार' : 'Verified Buyer'}
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  placeholder={language === 'mr' ? 'तुमचे नाव' : 'Your Name'}
-                  value={newReviewName}
-                  onChange={(e) => setNewReviewName(e.target.value)}
-                  className="bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder={language === 'mr' ? 'तुमचे नाव' : 'Your Name'}
+                    value={newReviewName}
+                    onChange={(e) => setNewReviewName(e.target.value)}
+                    className="bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
+                  />
+
+                  <select
+                    value={newReviewRating}
+                    onChange={(e) => setNewReviewRating(Number(e.target.value))}
+                    className="bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
+                  >
+                    <option value={5}>⭐⭐⭐⭐⭐ (5/5 Excellent)</option>
+                    <option value={4}>⭐⭐⭐⭐ (4/5 Good)</option>
+                    <option value={3}>⭐⭐⭐ (3/5 Average)</option>
+                    <option value={2}>⭐⭐ (2/5 Below Average)</option>
+                    <option value={1}>⭐ (1/5 Poor)</option>
+                  </select>
+                </div>
+
+                <textarea
+                  placeholder={language === 'mr' ? 'तुमची प्रतिक्रिया येथे लिहा...' : 'Your feedback on taste, packaging, delivery...'}
+                  value={newReviewComment}
+                  onChange={(e) => setNewReviewComment(e.target.value)}
+                  rows={3}
+                  className="w-full bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
                 />
 
-                <select
-                  value={newReviewRating}
-                  onChange={(e) => setNewReviewRating(Number(e.target.value))}
-                  className="bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
+                <button
+                  type="submit"
+                  className="bg-[#F4B400] text-[#111111] font-bold text-xs px-6 py-2.5 rounded-xl hover:bg-[#FF8C00] transition-colors"
                 >
-                  <option value={5}>⭐⭐⭐⭐⭐ (5/5 Excellent)</option>
-                  <option value={4}>⭐⭐⭐⭐ (4/5 Good)</option>
-                  <option value={3}>⭐⭐⭐ (3/5 Average)</option>
-                </select>
-              </div>
-
-              <textarea
-                placeholder={language === 'mr' ? 'तुमची प्रतिक्रिया येथे लिहा...' : 'Your feedback on taste, packaging, delivery...'}
-                value={newReviewComment}
-                onChange={(e) => setNewReviewComment(e.target.value)}
-                rows={3}
-                className="w-full bg-[#111111] text-white text-xs p-3 rounded-xl border border-zinc-700"
-              />
-
-              <button
-                type="submit"
-                className="bg-[#F4B400] text-[#111111] font-bold text-xs px-6 py-2.5 rounded-xl hover:bg-[#FF8C00]"
-              >
-                {language === 'mr' ? 'अभिप्राय सबमिट करा' : 'Submit Review'}
-              </button>
-            </form>
+                  {existingUserReview
+                    ? (language === 'mr' ? 'अभिप्राय अपडेट करा' : 'Update Review')
+                    : (language === 'mr' ? 'अभिप्राय सबमिट करा' : 'Submit Review')}
+                </button>
+              </form>
+            )}
           </div>
         )}
 
