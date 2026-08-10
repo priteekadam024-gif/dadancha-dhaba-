@@ -11,7 +11,7 @@ export const ShopPage: React.FC = () => {
 
   const [activeCategory, setActiveCategory] = useState<string>(selectedCategoryId || 'all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'rating'>('featured');
-  const [maxPrice, setMaxPrice] = useState<number>(3000);
+  const [maxPrice, setMaxPrice] = useState<number>(150000);
 
   // Filter products
   let filteredProducts = products.filter((p) => {
@@ -107,13 +107,13 @@ export const ShopPage: React.FC = () => {
             <input
               type="range"
               min="100"
-              max="3000"
-              step="100"
+              max="150000"
+              step="500"
               value={maxPrice}
               onChange={(e) => setMaxPrice(Number(e.target.value))}
-              className="accent-[#F4B400] w-24"
+              className="accent-[#F4B400] w-28 sm:w-36"
             />
-            <span className="font-bold text-[#F4B400]">₹{maxPrice}</span>
+            <span className="font-bold text-[#F4B400]">₹{maxPrice.toLocaleString('en-IN')}</span>
           </div>
 
           {/* Sort Dropdown */}
@@ -153,7 +153,7 @@ export const ShopPage: React.FC = () => {
             onClick={() => {
               setActiveCategory('all');
               setSearchQuery('');
-              setMaxPrice(3000);
+              setMaxPrice(150000);
             }}
             className="bg-[#F4B400] text-[#111111] text-xs font-bold px-4 py-2 rounded-full"
           >
