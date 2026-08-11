@@ -331,6 +331,9 @@ export async function supabaseSaveOrder(order: any) {
         order_status: order.orderStatus,
         tracking_number: order.trackingNumber || '',
         coupon_code: order.couponCode || null,
+        razorpay_order_id: order.razorpayOrderId || null,
+        razorpay_payment_id: order.razorpayPaymentId || null,
+        paid_at: order.paidAt || null,
         created_at: new Date().toISOString(),
       },
     ], { onConflict: 'id' });

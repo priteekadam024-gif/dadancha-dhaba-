@@ -121,6 +121,7 @@ interface AppContextType {
   
   // Checkout & Order Placement
   createOrder: (paymentMethod: Order['paymentMethod'], shippingAddress: Address) => Order;
+  addOrUpdateOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingNumber?: string) => void;
 
   // Admin CRUD Actions
@@ -1036,6 +1037,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newOrder;
   };
 
+  const addOrUpdateOrder = (orderObj: Order) => {
+    setOrders((prev) => {
+      const idx = prev.findIndex((o) => o.id === orderObj.id || (o.razorpayOrderId && o.razorpayOrderId === orderObj.razorpayOrderId));
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = orderObj;
+        return copy;
+      }
+      return [orderObj, ...prev];
+    });
+    setSelectedOrderId(orderObj.id);
+    clearCart();
+  };
+
   const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingNumber?: string) => {
     setOrders((prev) =>
       prev.map((o) =>
@@ -1559,6 +1574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyCoupon,
         removeCoupon,
         createOrder,
+        addOrUpdateOrder,
         updateOrderStatus,
         addProduct,
         updateProduct,

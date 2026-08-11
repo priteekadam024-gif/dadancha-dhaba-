@@ -158,6 +158,9 @@ export interface Order {
   carrier?: string;
   estimatedDeliveryDate?: string;
   couponCode?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paidAt?: string;
 }
 
 export interface VideoItem {

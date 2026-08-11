@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Address, PaymentMethod } from '../types';
 import { InvoiceModal } from '../components/InvoiceModal';
+import { mapDbOrderToFrontend } from '../utils/mappers';
 import confetti from 'canvas-confetti';
 import { 
   ShieldCheck, CreditCard, Smartphone, Banknote, 
-  MapPin, CheckCircle, Lock, ArrowLeft 
+  MapPin, CheckCircle, Lock, ArrowLeft, Loader2
 } from 'lucide-react';
 
 export const CheckoutPage: React.FC = () => {
   const { 
-    language, cart, currentUser, createOrder, 
+    language, cart, currentUser, createOrder, addOrUpdateOrder,
     appliedCoupon, navigateTo, showToast, contactConfig 
   } = useApp();
 
@@ -34,8 +35,9 @@ export const CheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
   const [placedOrder, setPlacedOrder] = useState<any | null>(null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Totals
+  // Trusted client display calculation (matches backend exact calculation)
   const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
   let discountAmount = 0;
   if (appliedCoupon) {
@@ -46,35 +48,178 @@ export const CheckoutPage: React.FC = () => {
     }
   }
   const shippingFee = subtotal > 499 || cart.length === 0 ? 0 : 50;
-  const gstAmount = Math.round(((subtotal - discountAmount) * 0.05));
+  const gstAmount = 0; // Included in price
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessing) return;
+
     if (!selectedAddress.name || !selectedAddress.phone || !selectedAddress.street) {
       showToast(language === 'mr' ? 'कृपया संपूर्ण पत्ता भरा' : 'Please complete shipping address', 'error');
       return;
     }
 
-    // Trigger Confetti Celebrations
-    try {
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-    } catch (e) {
-      // Ignore if confetti fails
+    if (cart.length === 0) {
+      showToast('Cart is empty', 'error');
+      return;
     }
 
-    const orderObj = createOrder(paymentMethod, selectedAddress);
-    setPlacedOrder(orderObj);
-    setShowInvoiceModal(true);
-    showToast(
-      language === 'mr' 
-        ? 'ऑर्डर यशस्वी झाली! दादाचा ढाबा परिवारातर्फे मनःपूर्वक धन्यवाद ❤️' 
-        : 'Order placed successfully! Thank you for ordering from Dadacha Dhaba ❤️'
-    );
+    setIsProcessing(true);
+
+    if (paymentMethod === 'razorpay' || paymentMethod === 'upi') {
+      try {
+        // 1. Initiate Razorpay Order from backend with server-verified prices
+        const response = await fetch('/api/payment/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: cart.map((item) => ({
+              productId: item.product.id,
+              quantity: item.quantity,
+              price: item.product.price,
+              productNameEn: item.product.nameEn,
+              productNameMr: item.product.nameMr,
+              image: item.product.images[0],
+              weight: item.product.weight,
+            })),
+            couponCode: appliedCoupon?.code,
+            shippingAddress: selectedAddress,
+            userId: currentUser?.id,
+            userEmail: currentUser?.email || (selectedAddress as any).email || 'customer@example.com',
+            userName: selectedAddress.name || currentUser?.name || 'Customer',
+            userPhone: selectedAddress.phone || currentUser?.phone || '',
+          }),
+        });
+
+        const orderData = await response.json();
+
+        if (!response.ok || !orderData.success) {
+          throw new Error(orderData.error || 'Failed to initiate Razorpay order on server.');
+        }
+
+        const { razorpayOrderId, orderId, orderNumber, amountInPaise, keyId, order: createdOrder } = orderData;
+
+        // 2. Ensure Razorpay SDK is loaded
+        if (!(window as any).Razorpay) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Razorpay Checkout script'));
+            document.body.appendChild(script);
+          });
+        }
+
+        // 3. Configure Razorpay modal options
+        const options = {
+          key: keyId || 'rzp_test_51a2b3c4d5',
+          amount: amountInPaise,
+          currency: 'INR',
+          name: 'Dadacha Dhaba | दादाचा ढाबा',
+          description: `Order ${orderNumber}`,
+          image: 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
+          order_id: razorpayOrderId,
+          prefill: {
+            name: selectedAddress.name,
+            email: currentUser?.email || '',
+            contact: selectedAddress.phone,
+          },
+          theme: {
+            color: '#F4B400',
+          },
+          handler: async (paymentResponse: any) => {
+            try {
+              // 4. Verify payment on backend server
+              const verifyRes = await fetch('/api/payment/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: paymentResponse.razorpay_order_id,
+                  razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                  razorpay_signature: paymentResponse.razorpay_signature,
+                  orderId: orderId,
+                }),
+              });
+
+              const verifyData = await verifyRes.json();
+
+              if (!verifyRes.ok || !verifyData.success) {
+                throw new Error(verifyData.error || 'Payment signature verification failed');
+              }
+
+              const verifiedOrder = mapDbOrderToFrontend(verifyData.order || createdOrder);
+              addOrUpdateOrder(verifiedOrder);
+              setPlacedOrder(verifiedOrder);
+              setShowInvoiceModal(true);
+
+              try {
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+              } catch (e) {}
+
+              showToast(
+                language === 'mr'
+                  ? 'पेमेंट यशस्वी! दादाचा ढाबा परिवारातर्फे मनःपूर्वक धन्यवाद ❤️'
+                  : 'Payment verified & order placed successfully! Thank you for ordering ❤️',
+                'success'
+              );
+            } catch (verifyErr: any) {
+              console.error('Payment verification error:', verifyErr);
+              showToast(verifyErr.message || 'Payment verification failed', 'error');
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setIsProcessing(false);
+              showToast(
+                language === 'mr'
+                  ? 'पेमेंट प्रक्रिया रद्द करण्यात आली. तुम्ही पुन्हा प्रयत्न करू शकता.'
+                  : 'Payment process cancelled. You can retry payment anytime.',
+                'info'
+              );
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+
+        rzp.on('payment.failed', function (failedRes: any) {
+          setIsProcessing(false);
+          showToast(
+            failedRes.error?.description || 'Payment failed. Please try another card or UPI.',
+            'error'
+          );
+        });
+
+        rzp.open();
+      } catch (err: any) {
+        console.error('Razorpay payment flow error:', err);
+        setIsProcessing(false);
+        showToast(err.message || 'Could not initiate Razorpay payment', 'error');
+      }
+    } else {
+      // Cash on Delivery Flow
+      try {
+        const orderObj = createOrder('cod', selectedAddress);
+        setPlacedOrder(orderObj);
+        setShowInvoiceModal(true);
+        try {
+          confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        } catch (e) {}
+        showToast(
+          language === 'mr'
+            ? 'ऑर्डर यशस्वी झाली! दादाचा ढाबा परिवारातर्फे मनःपूर्वक धन्यवाद ❤️'
+            : 'COD Order placed successfully! Thank you for ordering from Dadacha Dhaba ❤️',
+          'success'
+        );
+      } catch (err: any) {
+        showToast('Error placing COD order: ' + err.message, 'error');
+      } finally {
+        setIsProcessing(false);
+      }
+    }
   };
 
   if (cart.length === 0 && !placedOrder) {
@@ -302,10 +447,24 @@ export const CheckoutPage: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-base py-4 rounded-2xl hover:scale-[1.02] transition-all shadow-xl flex items-center justify-center gap-2"
+              disabled={isProcessing}
+              className="w-full bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-base py-4 rounded-2xl hover:scale-[1.02] transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Lock className="w-4 h-4" />
-              <span>{language === 'mr' ? 'ऑर्डर निश्चित करा' : 'Confirm & Place Order'}</span>
+              {isProcessing ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>{language === 'mr' ? 'पेमेंट प्रक्रिया सुरू आहे...' : 'Processing Payment...'}</span>
+                </div>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4" />
+                  <span>
+                    {paymentMethod === 'razorpay' || paymentMethod === 'upi'
+                      ? (language === 'mr' ? `Razorpay द्वारे ₹${grandTotal} द्या` : `Pay ₹${grandTotal} via Razorpay`)
+                      : (language === 'mr' ? 'ऑर्डर निश्चित करा (COD)' : 'Confirm & Place COD Order')}
+                  </span>
+                </>
+              )}
             </button>
           </div>
 

@@ -190,6 +190,9 @@ export function mapDbOrderToFrontend(row: any): Order {
     orderStatus: row.order_status || 'placed',
     trackingNumber: row.tracking_number || '',
     couponCode: row.coupon_code || undefined,
+    razorpayOrderId: row.razorpay_order_id || row.razorpayOrderId || undefined,
+    razorpayPaymentId: row.razorpay_payment_id || row.razorpayPaymentId || undefined,
+    paidAt: row.paid_at || row.paidAt || undefined,
   };
 }
 
