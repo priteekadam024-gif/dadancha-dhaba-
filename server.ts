@@ -80,9 +80,11 @@ async function startServer() {
 
   // Get Razorpay Public Key ID
   app.get('/api/payment/razorpay-key', (_req, res) => {
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
     res.json({
       success: true,
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_51a2b3c4d5'
+      keyId,
+      configured: Boolean(keyId && process.env.RAZORPAY_KEY_SECRET)
     });
   });
 
@@ -93,6 +95,17 @@ async function startServer() {
 
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, error: 'Cart is empty or items array missing.' });
+      }
+
+      // Check Razorpay environment credentials
+      const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+      if (!keyId || !keySecret) {
+        return res.status(400).json({
+          success: false,
+          error: 'Razorpay API credentials (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) are missing in the server environment. Please configure valid Razorpay Test Mode keys in backend environment variables.'
+        });
       }
 
       // Fetch trusted database products
@@ -111,7 +124,7 @@ async function startServer() {
         subtotal += price * qty;
         return {
           productId: pId,
-          productNameEn: dbP?.name_en || dbP?.nameEn || it.productNameEn || 'Product',
+          productNameEn: dbP?.name_en || dbP?.nameMr || it.productNameEn || 'Product',
           productNameMr: dbP?.name_mr || dbP?.nameMr || it.productNameMr || 'उत्पादन',
           image: (dbP?.images && dbP.images[0]) || it.image || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800',
           price,
@@ -144,11 +157,17 @@ async function startServer() {
       const orderId = 'ord-' + Date.now();
       const orderNumber = `DD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      let razorpayOrderId = '';
       const rzp = getRazorpay();
+      if (!rzp) {
+        return res.status(400).json({
+          success: false,
+          error: 'Razorpay client failed to initialize. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
+        });
+      }
 
-      if (rzp) {
-        const rzpOrder = await rzp.orders.create({
+      let rzpOrder: any;
+      try {
+        rzpOrder = await rzp.orders.create({
           amount: amountInPaise,
           currency: 'INR',
           receipt: orderId,
@@ -159,11 +178,16 @@ async function startServer() {
             userEmail: userEmail || ''
           }
         });
-        razorpayOrderId = rzpOrder.id;
-      } else {
-        // Test mode fallback order ID if env variables are not yet configured
-        razorpayOrderId = `order_test_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      } catch (rzpErr: any) {
+        console.error('Razorpay API orders.create failure:', rzpErr);
+        const errMsg = rzpErr?.error?.description || rzpErr?.message || 'Failed to create order on Razorpay servers.';
+        return res.status(400).json({
+          success: false,
+          error: `Razorpay Order Creation Failed: ${errMsg}`
+        });
       }
+
+      const razorpayOrderId = rzpOrder.id;
 
       const orderPayload = {
         id: orderId,
@@ -206,7 +230,7 @@ async function startServer() {
         razorpayOrderId,
         amount: grandTotal,
         amountInPaise,
-        keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_51a2b3c4d5',
+        keyId,
         order: savedOrder?.[0] || orderPayload
       });
     } catch (err: any) {
@@ -225,21 +249,31 @@ async function startServer() {
       }
 
       const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      if (keySecret) {
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          return res.status(400).json({ success: false, error: 'Missing Razorpay signature details.' });
-        }
-        const generatedSignature = crypto
-          .createHmac('sha256', keySecret)
-          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-          .digest('hex');
+      if (!keySecret) {
+        return res.status(400).json({
+          success: false,
+          error: 'Server error: RAZORPAY_KEY_SECRET is missing. Cannot verify payment signature.'
+        });
+      }
 
-        if (generatedSignature !== razorpay_signature) {
-          return res.status(400).json({
-            success: false,
-            error: 'Razorpay signature verification failed. Payment cannot be marked as paid.'
-          });
-        }
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required Razorpay payment signature parameter details.'
+        });
+      }
+
+      const generatedSignature = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      if (generatedSignature !== razorpay_signature) {
+        console.error('Razorpay signature mismatch for orderId:', orderId);
+        return res.status(400).json({
+          success: false,
+          error: 'Razorpay signature verification failed. Payment cannot be marked as paid.'
+        });
       }
 
       const paidAt = new Date().toISOString();
@@ -250,14 +284,15 @@ async function startServer() {
         .update({
           payment_status: 'paid',
           payment_method: 'razorpay',
-          razorpay_order_id: razorpay_order_id || null,
-          razorpay_payment_id: razorpay_payment_id || `pay_test_${Date.now()}`,
+          razorpay_order_id: razorpay_order_id,
+          razorpay_payment_id: razorpay_payment_id,
           paid_at: paidAt
         })
         .or(`id.eq.${orderId},razorpay_order_id.eq.${razorpay_order_id}`)
         .select();
 
       if (updateErr) {
+        console.error('Database update error on payment verification:', updateErr.message);
         return res.status(500).json({ success: false, error: 'Database update failed: ' + updateErr.message });
       }
 
