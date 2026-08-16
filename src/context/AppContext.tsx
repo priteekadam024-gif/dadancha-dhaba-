@@ -157,10 +157,11 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-function getPathFromState(page: NavigationPage, tab?: string): string {
+function getPathFromState(page: NavigationPage, tab?: string, productId?: string | null): string {
   switch (page) {
     case 'home': return '/';
     case 'shop': return '/shop';
+    case 'product-detail': return productId ? `/product/${productId}` : '/shop';
     case 'categories': return '/categories';
     case 'cart': return '/cart';
     case 'wishlist': return '/wishlist';
@@ -213,34 +214,50 @@ function getPathFromState(page: NavigationPage, tab?: string): string {
   }
 }
 
-function parseUrlPath(path: string): { page: NavigationPage; tab: string } {
+function parseUrlPath(path: string): { page: NavigationPage; tab: string; productId?: string; categoryId?: string } {
   const clean = path.toLowerCase().replace(/\/$/, '') || '/';
 
   if (clean === '/' || clean === '/home') return { page: 'home', tab: '' };
-  if (clean === '/shop') return { page: 'shop', tab: '' };
-  if (clean === '/categories') return { page: 'categories', tab: '' };
+  if (clean === '/shop' || clean === '/products' || clean === '/product') return { page: 'shop', tab: '' };
+  
+  if (clean.startsWith('/product/') || clean.startsWith('/products/')) {
+    const parts = path.split('/');
+    const prodId = parts[2];
+    if (prodId) {
+      return { page: 'product-detail', tab: '', productId: prodId };
+    }
+    return { page: 'shop', tab: '' };
+  }
+
+  if (clean === '/categories' || clean === '/category') return { page: 'categories', tab: '' };
+  if (clean.startsWith('/category/') || clean.startsWith('/categories/')) {
+    const parts = path.split('/');
+    const catId = parts[2];
+    return { page: 'categories', tab: '', categoryId: catId };
+  }
+
   if (clean === '/cart') return { page: 'cart', tab: '' };
   if (clean === '/wishlist') return { page: 'wishlist', tab: '' };
-  if (clean === '/videos') return { page: 'videos', tab: '' };
-  if (clean === '/gallery') return { page: 'gallery', tab: '' };
-  if (clean === '/recipes') return { page: 'recipes', tab: '' };
-  if (clean === '/contact') return { page: 'contact', tab: '' };
-  if (clean === '/about') return { page: 'about', tab: '' };
-  if (clean === '/login') return { page: 'login', tab: '' };
-  if (clean === '/register') return { page: 'register', tab: '' };
+  if (clean === '/videos' || clean === '/video') return { page: 'videos', tab: '' };
+  if (clean === '/gallery' || clean === '/photos') return { page: 'gallery', tab: '' };
+  if (clean === '/recipes' || clean === '/recipe' || clean === '/blog') return { page: 'recipes', tab: '' };
+  if (clean === '/contact' || clean === '/contact-us') return { page: 'contact', tab: '' };
+  if (clean === '/about' || clean === '/about-us') return { page: 'about', tab: '' };
+  if (clean === '/login' || clean === '/signin') return { page: 'login', tab: '' };
+  if (clean === '/register' || clean === '/signup') return { page: 'register', tab: '' };
   if (clean === '/forgot-password') return { page: 'forgot-password', tab: '' };
   if (clean === '/checkout') return { page: 'checkout', tab: '' };
-  if (clean === '/track-order') return { page: 'track-order', tab: '' };
+  if (clean === '/track-order' || clean === '/track') return { page: 'track-order', tab: '' };
 
   if (clean === '/privacy-policy' || clean === '/privacy') return { page: 'privacy-policy', tab: '' };
   if (clean === '/terms' || clean === '/terms-and-conditions') return { page: 'terms', tab: '' };
   if (clean === '/shipping-policy' || clean === '/shipping') return { page: 'shipping-policy', tab: '' };
   if (clean === '/return-policy' || clean === '/refund-policy' || clean === '/returns') return { page: 'return-policy', tab: '' };
-  if (clean === '/faqs') return { page: 'faqs', tab: '' };
+  if (clean === '/faqs' || clean === '/faq') return { page: 'faqs', tab: '' };
 
   // Account
   if (clean === '/account' || clean === '/account/profile') return { page: 'account', tab: 'profile' };
-  if (clean === '/account/orders') return { page: 'account', tab: 'orders' };
+  if (clean === '/account/orders' || clean === '/orders') return { page: 'account', tab: 'orders' };
   if (clean === '/account/address' || clean === '/account/addresses') return { page: 'account', tab: 'addresses' };
   if (clean === '/account/settings') return { page: 'account', tab: 'settings' };
 
@@ -605,7 +622,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentPage(finalPage);
 
     // Sync URL history
-    const targetPath = getPathFromState(finalPage, finalTab);
+    const targetPath = getPathFromState(finalPage, finalTab, params?.productId || selectedProductId);
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
@@ -616,7 +633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync route on initial load and browser back/forward (popstate)
   useEffect(() => {
     const handleLocationChange = () => {
-      const { page, tab } = parseUrlPath(window.location.pathname);
+      const { page, tab, productId, categoryId } = parseUrlPath(window.location.pathname);
       
       let targetPage = page;
       let targetTab = tab;
@@ -635,6 +652,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         targetPage = 'admin-dashboard';
         targetTab = 'analytics';
       }
+
+      if (productId) setSelectedProductId(productId);
+      if (categoryId) setSelectedCategoryId(categoryId);
 
       setCurrentPage(targetPage);
       if (targetTab) setActiveTab(targetTab);
