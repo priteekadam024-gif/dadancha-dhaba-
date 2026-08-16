@@ -51,6 +51,16 @@ export const CheckoutPage: React.FC = () => {
   const gstAmount = 0; // Included in price
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
 
+  const getApiUrl = (endpoint: string) => {
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+    if (baseUrl && typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
+      const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+      const cleanEndpoint = endpoint.replace(/^\/+/, '');
+      return `${cleanBase}/${cleanEndpoint}`;
+    }
+    return endpoint;
+  };
+
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isProcessing) return;
@@ -70,7 +80,7 @@ export const CheckoutPage: React.FC = () => {
     if (paymentMethod === 'razorpay' || paymentMethod === 'upi') {
       try {
         // 1. Initiate Razorpay Order from backend with server-verified prices
-        const response = await fetch('/api/payment/create-order', {
+        const response = await fetch(getApiUrl('/api/payment/create-order'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -140,7 +150,7 @@ export const CheckoutPage: React.FC = () => {
           handler: async (paymentResponse: any) => {
             try {
               // 4. Verify payment on backend server
-              const verifyRes = await fetch('/api/payment/verify', {
+              const verifyRes = await fetch(getApiUrl('/api/payment/verify'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

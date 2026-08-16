@@ -70,68 +70,88 @@ async function startServer() {
 
   // Razorpay Instance Helper
   const getRazorpay = () => {
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    
+    const keyId = rawKeyId ? rawKeyId.trim() : '';
+    const keySecret = rawKeySecret ? rawKeySecret.trim() : '';
+
     if (keyId && keySecret) {
       return new Razorpay({ key_id: keyId, key_secret: keySecret });
     }
     return null;
   };
 
-  // Get Razorpay Public Key ID
+  // Get Razorpay Public Key ID & Status
   app.get('/api/payment/razorpay-key', (_req, res) => {
-    const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    const keyId = rawKeyId.trim();
+    const keySecret = rawKeySecret.trim();
+
+    console.log(`[Razorpay Config Check] Key ID Present: ${Boolean(keyId)}, Secret Present: ${Boolean(keySecret)}`);
+
     res.json({
       success: true,
       keyId,
-      configured: Boolean(keyId && process.env.RAZORPAY_KEY_SECRET)
+      configured: Boolean(keyId && keySecret)
     });
   });
 
-  // Create Razorpay Order securely with server-side pricing verification
-  app.post('/api/payment/create-order', async (req, res) => {
+  // Handler for Razorpay Order Creation
+  const handleCreateRazorpayOrder = async (req: express.Request, res: express.Response) => {
     try {
-      const { items, couponCode, shippingAddress, userId, userEmail, userName, userPhone } = req.body || {};
+      const { items, couponCode, shippingAddress, userId, userEmail, userName, userPhone, amount: directAmount } = req.body || {};
 
-      if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ success: false, error: 'Cart is empty or items array missing.' });
-      }
-
-      // Check Razorpay environment credentials
-      const keyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+      const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+      const keyId = rawKeyId.trim();
+      const keySecret = rawKeySecret.trim();
 
       if (!keyId || !keySecret) {
+        console.error('[Razorpay Error] Razorpay credentials are missing or unconfigured in server environment.');
         return res.status(400).json({
           success: false,
-          error: 'Razorpay API credentials (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) are missing in the server environment. Please configure valid Razorpay Test Mode keys in backend environment variables.'
+          error: 'Razorpay credentials are not configured on the backend. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.'
         });
       }
 
-      // Fetch trusted database products
-      const { data: dbProducts } = await supabase.from('products').select('*');
-      const productsMap = new Map<string, any>();
-      if (Array.isArray(dbProducts)) {
-        dbProducts.forEach((p) => productsMap.set(p.id, p));
+      const rzp = getRazorpay();
+      if (!rzp) {
+        return res.status(400).json({
+          success: false,
+          error: 'Razorpay client failed to initialize. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
+        });
       }
 
       let subtotal = 0;
-      const validatedItems = items.map((it: any) => {
-        const pId = it.productId || it.product_id || it.id;
-        const dbP = productsMap.get(pId);
-        const qty = Math.max(1, parseInt(it.quantity, 10) || 1);
-        const price = dbP ? Number(dbP.price) : (Number(it.price) || 0);
-        subtotal += price * qty;
-        return {
-          productId: pId,
-          productNameEn: dbP?.name_en || dbP?.nameMr || it.productNameEn || 'Product',
-          productNameMr: dbP?.name_mr || dbP?.nameMr || it.productNameMr || 'उत्पादन',
-          image: (dbP?.images && dbP.images[0]) || it.image || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800',
-          price,
-          quantity: qty,
-          weight: dbP?.weight || it.weight || '250g',
-        };
-      });
+      let validatedItems: any[] = [];
+
+      if (Array.isArray(items) && items.length > 0) {
+        // Fetch trusted database products
+        const { data: dbProducts } = await supabase.from('products').select('*');
+        const productsMap = new Map<string, any>();
+        if (Array.isArray(dbProducts)) {
+          dbProducts.forEach((p) => productsMap.set(p.id, p));
+        }
+
+        validatedItems = items.map((it: any) => {
+          const pId = it.productId || it.product_id || it.id;
+          const dbP = productsMap.get(pId);
+          const qty = Math.max(1, parseInt(it.quantity, 10) || 1);
+          const price = dbP ? Number(dbP.price) : (Number(it.price) || 0);
+          subtotal += price * qty;
+          return {
+            productId: pId,
+            productNameEn: dbP?.name_en || dbP?.nameMr || it.productNameEn || 'Product',
+            productNameMr: dbP?.name_mr || dbP?.nameMr || it.productNameMr || 'उत्पादन',
+            image: (dbP?.images && dbP.images[0]) || it.image || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800',
+            price,
+            quantity: qty,
+            weight: dbP?.weight || it.weight || '250g',
+          };
+        });
+      }
 
       let discountAmount = 0;
       if (couponCode) {
@@ -147,7 +167,12 @@ async function startServer() {
 
       const shippingFee = subtotal > 499 || validatedItems.length === 0 ? 0 : 50;
       const gstAmount = 0;
-      const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+      let grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+
+      // Fallback for direct amount if specified and items not provided
+      if (grandTotal === 0 && directAmount && Number(directAmount) > 0) {
+        grandTotal = Number(directAmount);
+      }
 
       if (grandTotal <= 0) {
         return res.status(400).json({ success: false, error: 'Invalid order total amount.' });
@@ -156,14 +181,6 @@ async function startServer() {
       const amountInPaise = Math.round(grandTotal * 100);
       const orderId = 'ord-' + Date.now();
       const orderNumber = `DD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      const rzp = getRazorpay();
-      if (!rzp) {
-        return res.status(400).json({
-          success: false,
-          error: 'Razorpay client failed to initialize. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.'
-        });
-      }
 
       let rzpOrder: any;
       try {
@@ -179,8 +196,17 @@ async function startServer() {
           }
         });
       } catch (rzpErr: any) {
-        console.error('Razorpay API orders.create failure:', rzpErr);
-        const errMsg = rzpErr?.error?.description || rzpErr?.message || 'Failed to create order on Razorpay servers.';
+        console.error('[Razorpay API Failure]', {
+          statusCode: rzpErr?.statusCode,
+          code: rzpErr?.error?.code,
+          description: rzpErr?.error?.description,
+          reason: rzpErr?.error?.reason,
+          source: rzpErr?.error?.source,
+          step: rzpErr?.error?.step,
+          message: rzpErr?.message
+        });
+
+        const errMsg = rzpErr?.error?.description || rzpErr?.message || 'Authentication failed or invalid API credentials.';
         return res.status(400).json({
           success: false,
           error: `Razorpay Order Creation Failed: ${errMsg}`
@@ -199,7 +225,7 @@ async function startServer() {
         customer_name: shippingAddress?.name || userName || 'Customer',
         customer_phone: shippingAddress?.phone || userPhone || '',
         customer_email: userEmail || shippingAddress?.email || '',
-        shipping_address: shippingAddress,
+        shipping_address: shippingAddress || {},
         items: validatedItems,
         subtotal,
         discount_amount: discountAmount,
@@ -225,11 +251,13 @@ async function startServer() {
 
       return res.json({
         success: true,
+        order_id: razorpayOrderId,
+        razorpayOrderId,
         orderId,
         orderNumber,
-        razorpayOrderId,
         amount: grandTotal,
         amountInPaise,
+        currency: 'INR',
         keyId,
         order: savedOrder?.[0] || orderPayload
       });
@@ -237,7 +265,11 @@ async function startServer() {
       console.error('Error creating Razorpay order:', err);
       return res.status(500).json({ success: false, error: err.message || 'Failed to create payment order.' });
     }
-  });
+  };
+
+  // Bind Order Creation Endpoints
+  app.post('/api/payment/create-order', handleCreateRazorpayOrder);
+  app.post('/api/create-order', handleCreateRazorpayOrder);
 
   // Verify Razorpay Payment Signature
   app.post('/api/payment/verify', async (req, res) => {
