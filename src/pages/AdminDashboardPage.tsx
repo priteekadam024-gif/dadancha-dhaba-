@@ -4,6 +4,7 @@ import { Product, VideoItem } from '../types';
 import { InvoiceModal } from '../components/InvoiceModal';
 import { AdminProductManager } from '../components/AdminProductManager';
 import { AdminCategoryManager } from '../components/AdminCategoryManager';
+import { AdminRecipeManager } from '../components/AdminRecipeManager';
 import { BrandingManager } from '../components/BrandingManager';
 import { AdminMediaManager } from '../components/AdminMediaManager';
 import { AdminReelsManager } from '../components/AdminReelsManager';
@@ -22,7 +23,7 @@ interface AdminDashboardPageProps {
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ defaultTab }) => {
   const { 
-    language, isAdminLoggedIn, logoutAdmin, products, categories, orders, 
+    language, isAdminLoggedIn, logoutAdmin, products, categories, recipes, orders, 
     videos, allUsers, adminUpdateUserStatus, adminDeleteUser, adminResetUserPassword,
     updateOrderStatus, addProduct, deleteProduct, 
     addVideo, deleteVideo, navigateTo, showToast, activeTab: contextTab, setActiveTab: setContextTab,
@@ -100,7 +101,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ defaultT
     });
   };
 
-  const validAdminTabs = ['analytics', 'products', 'categories', 'orders', 'videos', 'gallery', 'users', 'branding', 'media', 'settings', 'revenue'];
+  const validAdminTabs = ['analytics', 'products', 'categories', 'recipes', 'orders', 'videos', 'gallery', 'users', 'branding', 'media', 'settings', 'revenue'];
   const activeTab = validAdminTabs.includes(contextTab) ? contextTab : 'analytics';
   const setActiveTab = (tab: string) => {
     setContextTab(tab);
@@ -353,6 +354,14 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
           }`}
         >
           📁 Category Management ({categories.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('recipes')}
+          className={`py-3 px-4 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'recipes' ? 'border-[#F4B400] text-[#F4B400]' : 'border-transparent text-zinc-400 hover:text-white'
+          }`}
+        >
+          📖 Written Recipes ({recipes.length})
         </button>
         <button
           onClick={() => setActiveTab('videos')}
@@ -633,6 +642,13 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
       {activeTab === 'categories' && (
         <ErrorBoundary fallbackTitle="Admin Category Manager Notice">
           <AdminCategoryManager />
+        </ErrorBoundary>
+      )}
+
+      {/* TAB: Written Recipe Management */}
+      {activeTab === 'recipes' && (
+        <ErrorBoundary fallbackTitle="Admin Recipe Manager Notice">
+          <AdminRecipeManager />
         </ErrorBoundary>
       )}
 

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Product, Category, CartItem, Order, VideoItem, GalleryItem, 
-  Review, Coupon, Recipe, User, Language, NavigationPage, Address, OrderStatus, UserNotificationSettings, ContactConfig 
+  Review, Coupon, Recipe, RecipeCategory, RecipeSubcategory, ProductVariant,
+  User, Language, NavigationPage, Address, OrderStatus, UserNotificationSettings, ContactConfig 
 } from '../types';
 import { 
   supabase, 
@@ -34,7 +35,14 @@ import {
   supabaseGetMediaFiles,
   supabaseSaveMediaRecord,
   supabaseDeleteMediaRecord,
-  supabaseUploadMediaStorageAsset
+  supabaseUploadMediaStorageAsset,
+  supabaseGetRecipes,
+  supabaseSaveRecipe,
+  supabaseDeleteRecipe,
+  supabaseGetRecipeCategories,
+  supabaseSaveRecipeCategory,
+  supabaseSaveRecipeSubcategory,
+  supabaseDeleteRecipeCategory
 } from '../lib/supabase';
 
 import {
@@ -45,7 +53,10 @@ import {
   mapDbOrderToFrontend,
   mapDbMediaToVideo,
   mapDbMediaToGallery,
-  mapDbProfileToUser
+  mapDbProfileToUser,
+  mapDbRecipeToFrontend,
+  mapFrontendRecipeToDb,
+  mapDbRecipeCategoryToFrontend
 } from '../utils/mappers';
 
 interface Toast {
@@ -61,10 +72,11 @@ interface AppContextType {
   currentPage: NavigationPage;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  navigateTo: (page: NavigationPage, params?: { productId?: string; orderId?: string; categoryId?: string; tab?: string }) => void;
+  navigateTo: (page: NavigationPage, params?: { productId?: string; orderId?: string; categoryId?: string; recipeId?: string; tab?: string }) => void;
   selectedProductId: string | null;
   selectedOrderId: string | null;
   selectedCategoryId: string | null;
+  selectedRecipeId: string | null;
 
   // Search & Filters
   searchQuery: string;
@@ -78,6 +90,7 @@ interface AppContextType {
   reviews: Review[];
   coupons: Coupon[];
   recipes: Recipe[];
+  recipeCategories: RecipeCategory[];
   orders: Order[];
   isLoadingData: boolean;
   fetchError: string | null;
@@ -111,9 +124,9 @@ interface AppContextType {
   cart: CartItem[];
   wishlist: string[];
   appliedCoupon: Coupon | null;
-  addToCart: (product: Product, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
+  addToCart: (product: Product, quantity?: number, selectedVariant?: ProductVariant) => void;
+  removeFromCart: (productId: string, variantId?: string) => void;
+  updateCartQuantity: (productId: string, quantity: number, variantId?: string) => void;
   clearCart: () => void;
   toggleWishlist: (productId: string) => void;
   applyCoupon: (code: string) => { success: boolean; message: string };
@@ -134,6 +147,16 @@ interface AppContextType {
   reorderCategories: (newOrderedCategories: Category[]) => void;
   toggleCategoryStatus: (id: string) => void;
   toggleCategoryFeatured: (id: string) => void;
+
+  // Recipe Management Actions
+  addRecipe: (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>) => Promise<boolean>;
+  updateRecipe: (id: string, recipe: Partial<Recipe>) => Promise<boolean>;
+  deleteRecipe: (id: string) => Promise<boolean>;
+  toggleRecipePublished: (id: string) => Promise<void>;
+  addRecipeCategory: (category: Omit<RecipeCategory, 'id'>) => Promise<boolean>;
+  addRecipeSubcategory: (sub: Omit<RecipeSubcategory, 'id'>) => Promise<boolean>;
+  deleteRecipeCategory: (id: string) => Promise<boolean>;
+
   latestVideosLimit: number;
   updateLatestVideosLimit: (limit: number) => Promise<void>;
   addVideoRecord: (data: Partial<VideoItem> & { file?: File }) => Promise<boolean>;
@@ -157,7 +180,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-function getPathFromState(page: NavigationPage, tab?: string, productId?: string | null): string {
+function getPathFromState(page: NavigationPage, tab?: string, productId?: string | null, recipeId?: string | null): string {
   switch (page) {
     case 'home': return '/';
     case 'shop': return '/shop';
@@ -168,6 +191,7 @@ function getPathFromState(page: NavigationPage, tab?: string, productId?: string
     case 'videos': return '/videos';
     case 'gallery': return '/gallery';
     case 'recipes': return '/recipes';
+    case 'recipe-detail': return recipeId ? `/recipe/${recipeId}` : '/recipes';
     case 'contact': return '/contact';
     case 'about': return '/about';
     case 'login': return '/login';
@@ -198,6 +222,7 @@ function getPathFromState(page: NavigationPage, tab?: string, productId?: string
 
     case 'admin-dashboard':
       if (tab === 'products') return '/admin/products';
+      if (tab === 'recipes') return '/admin/recipes';
       if (tab === 'categories') return '/admin/categories';
       if (tab === 'orders') return '/admin/orders';
       if (tab === 'customers' || tab === 'users') return '/admin/customers';
@@ -214,7 +239,7 @@ function getPathFromState(page: NavigationPage, tab?: string, productId?: string
   }
 }
 
-function parseUrlPath(path: string): { page: NavigationPage; tab: string; productId?: string; categoryId?: string } {
+function parseUrlPath(path: string): { page: NavigationPage; tab: string; productId?: string; categoryId?: string; recipeId?: string } {
   const clean = path.toLowerCase().replace(/\/$/, '') || '/';
 
   if (clean === '/' || clean === '/home') return { page: 'home', tab: '' };
@@ -236,11 +261,20 @@ function parseUrlPath(path: string): { page: NavigationPage; tab: string; produc
     return { page: 'categories', tab: '', categoryId: catId };
   }
 
+  if (clean === '/recipes' || clean === '/blog') return { page: 'recipes', tab: '' };
+  if (clean.startsWith('/recipe/') || clean.startsWith('/recipes/')) {
+    const parts = path.split('/');
+    const recId = parts[2];
+    if (recId) {
+      return { page: 'recipe-detail', tab: '', recipeId: recId };
+    }
+    return { page: 'recipes', tab: '' };
+  }
+
   if (clean === '/cart') return { page: 'cart', tab: '' };
   if (clean === '/wishlist') return { page: 'wishlist', tab: '' };
   if (clean === '/videos' || clean === '/video') return { page: 'videos', tab: '' };
   if (clean === '/gallery' || clean === '/photos') return { page: 'gallery', tab: '' };
-  if (clean === '/recipes' || clean === '/recipe' || clean === '/blog') return { page: 'recipes', tab: '' };
   if (clean === '/contact' || clean === '/contact-us') return { page: 'contact', tab: '' };
   if (clean === '/about' || clean === '/about-us') return { page: 'about', tab: '' };
   if (clean === '/login' || clean === '/signin') return { page: 'login', tab: '' };
@@ -267,6 +301,7 @@ function parseUrlPath(path: string): { page: NavigationPage; tab: string; produc
   }
   if (clean === '/admin/dashboard' || clean === '/admin/analytics') return { page: 'admin-dashboard', tab: 'analytics' };
   if (clean === '/admin/products') return { page: 'admin-dashboard', tab: 'products' };
+  if (clean === '/admin/recipes') return { page: 'admin-dashboard', tab: 'recipes' };
   if (clean === '/admin/categories') return { page: 'admin-dashboard', tab: 'categories' };
   if (clean === '/admin/orders') return { page: 'admin-dashboard', tab: 'orders' };
   if (clean === '/admin/customers' || clean === '/admin/users') return { page: 'admin-dashboard', tab: 'users' };
@@ -287,6 +322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -298,7 +334,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [recipes] = useState<Recipe[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
@@ -403,7 +440,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       setReviews(mappedReviews);
 
-      // 7. Fetch Site Settings
+      // 7. Fetch Written Recipes & Categories
+      const rawRecipes = await supabaseGetRecipes();
+      const mappedRecipes = rawRecipes.map(mapDbRecipeToFrontend);
+      setRecipes(mappedRecipes);
+
+      const rawRecipeCategories = await supabaseGetRecipeCategories();
+      const mappedRecipeCategories = rawRecipeCategories.map(mapDbRecipeCategoryToFrontend);
+      setRecipeCategories(mappedRecipeCategories);
+
+      // 8. Fetch Site Settings
       const siteSettings = await supabaseGetSiteSettings();
       if (siteSettings?.latest_videos_count !== undefined) {
         setLatestVideosLimit(Number(siteSettings.latest_videos_count) || 2);
@@ -589,10 +635,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(language === 'mr' ? 'संपर्क माहिती अपडेट केली!' : 'Contact Information updated successfully!');
   };
 
-  const navigateTo = (page: NavigationPage, params?: { productId?: string; orderId?: string; categoryId?: string; tab?: string }) => {
+  const navigateTo = (page: NavigationPage, params?: { productId?: string; orderId?: string; categoryId?: string; recipeId?: string; tab?: string }) => {
     if (params?.productId) setSelectedProductId(params.productId);
     if (params?.orderId) setSelectedOrderId(params.orderId);
     if (params?.categoryId) setSelectedCategoryId(params.categoryId);
+    if (params?.recipeId) setSelectedRecipeId(params.recipeId);
     
     let targetTab = params?.tab || (page === 'account' ? 'profile' : page === 'admin-dashboard' ? 'analytics' : '');
     if (page === 'orders') targetTab = 'orders';
@@ -622,7 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentPage(finalPage);
 
     // Sync URL history
-    const targetPath = getPathFromState(finalPage, finalTab, params?.productId || selectedProductId);
+    const targetPath = getPathFromState(finalPage, finalTab, params?.productId || selectedProductId, params?.recipeId || selectedRecipeId);
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
@@ -633,7 +680,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync route on initial load and browser back/forward (popstate)
   useEffect(() => {
     const handleLocationChange = () => {
-      const { page, tab, productId, categoryId } = parseUrlPath(window.location.pathname);
+      const { page, tab, productId, categoryId, recipeId } = parseUrlPath(window.location.pathname);
       
       let targetPage = page;
       let targetTab = tab;
@@ -655,6 +702,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (productId) setSelectedProductId(productId);
       if (categoryId) setSelectedCategoryId(categoryId);
+      if (recipeId) setSelectedRecipeId(recipeId);
 
       setCurrentPage(targetPage);
       if (targetTab) setActiveTab(targetTab);
@@ -920,35 +968,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     navigateTo('home');
   };
 
-  const addToCart = (product: Product, quantity = 1) => {
+  const addToCart = (product: Product, quantity = 1, selectedVariant?: ProductVariant) => {
     setCart((prevCart) => {
-      const existing = prevCart.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prevCart.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
-        );
+      const variantKey = selectedVariant?.id || selectedVariant?.size || null;
+      const existingIdx = prevCart.findIndex((item) => {
+        const itemVariantKey = item.selectedVariant?.id || item.selectedVariant?.size || null;
+        return item.product.id === product.id && itemVariantKey === variantKey;
+      });
+
+      if (existingIdx >= 0) {
+        const copy = [...prevCart];
+        copy[existingIdx] = {
+          ...copy[existingIdx],
+          quantity: copy[existingIdx].quantity + quantity,
+        };
+        return copy;
       }
-      return [...prevCart, { product, quantity }];
+      return [...prevCart, { product, quantity, selectedVariant }];
     });
+    
+    const sizeSuffix = selectedVariant ? ` (${selectedVariant.size})` : '';
     showToast(
       language === 'mr' 
-        ? `${product.nameMr} कार्टमध्ये जोडले!` 
-        : `${product.nameEn} added to cart!`
+        ? `${product.nameMr}${sizeSuffix} कार्टमध्ये जोडले!` 
+        : `${product.nameEn}${sizeSuffix} added to cart!`
     );
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+  const removeFromCart = (productId: string, variantId?: string) => {
+    setCart((prev) => prev.filter((item) => {
+      if (item.product.id !== productId) return true;
+      if (variantId) {
+        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.size;
+        return itemVarId !== variantId;
+      }
+      return false;
+    }));
     showToast(language === 'mr' ? 'वस्तू कार्टमधून काढली' : 'Item removed from cart', 'info');
   };
 
-  const updateCartQuantity = (productId: string, quantity: number) => {
+  const updateCartQuantity = (productId: string, quantity: number, variantId?: string) => {
     if (quantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(productId, variantId);
       return;
     }
     setCart((prev) =>
-      prev.map((item) => (item.product.id === productId ? { ...item, quantity } : item))
+      prev.map((item) => {
+        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.size;
+        if (item.product.id === productId && (!variantId || itemVarId === variantId)) {
+          return { ...item, quantity };
+        }
+        return item;
+      })
     );
   };
 
@@ -980,7 +1051,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+    const subtotal = cart.reduce((acc, item) => {
+      const price = item.selectedVariant ? item.selectedVariant.price : item.product.price;
+      return acc + price * item.quantity;
+    }, 0);
+
     if (subtotal < coupon.minOrderValue) {
       return {
         success: false,
@@ -1001,7 +1076,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createOrder = (paymentMethod: Order['paymentMethod'], shippingAddress: Address): Order => {
-    const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+    const subtotal = cart.reduce((acc, item) => {
+      const price = item.selectedVariant ? item.selectedVariant.price : item.product.price;
+      return acc + price * item.quantity;
+    }, 0);
+
     let discountAmount = 0;
     if (appliedCoupon) {
       if (appliedCoupon.discountType === 'percentage') {
@@ -1023,15 +1102,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userEmail: currentUser?.email || (shippingAddress as any).email || 'customer@example.com',
       userPhone: shippingAddress.phone || currentUser?.phone || '',
       shippingAddress,
-      items: cart.map((item) => ({
-        productId: item.product.id,
-        productNameEn: item.product.nameEn,
-        productNameMr: item.product.nameMr,
-        image: item.product.images[0],
-        price: item.product.price,
-        quantity: item.quantity,
-        weight: item.product.weight,
-      })),
+      items: cart.map((item) => {
+        const itemPrice = item.selectedVariant ? item.selectedVariant.price : item.product.price;
+        const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : item.product.weight;
+        return {
+          productId: item.product.id,
+          productNameEn: item.product.nameEn + (item.selectedVariant ? ` (${item.selectedVariant.size})` : ''),
+          productNameMr: item.product.nameMr + (item.selectedVariant ? ` (${item.selectedVariant.size})` : ''),
+          image: (item.product.images && item.product.images.length > 0) ? item.product.images[0] : '',
+          price: itemPrice,
+          quantity: item.quantity,
+          weight: itemWeight,
+          selectedVariantId: item.selectedVariant?.id,
+          selectedVariantSize: item.selectedVariant?.size,
+        };
+      }),
       subtotal,
       discountAmount,
       shippingFee,
@@ -1226,6 +1311,141 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cat = categories.find((c) => c.id === id);
     if (!cat) return;
     updateCategory(id, { isFeatured: !cat.isFeatured });
+  };
+
+  // Recipe Management Functions
+  const addRecipe = async (recipeData: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>): Promise<boolean> => {
+    const now = new Date().toISOString().split('T')[0];
+    const newRecipe: Recipe = {
+      ...recipeData,
+      id: recipeData.slug ? recipeData.slug : 'rec-' + Date.now(),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const { data, error } = await supabaseSaveRecipe(mapFrontendRecipeToDb(newRecipe), false);
+    if (error || !data) {
+      showToast(`Error saving recipe: ${error?.message || 'Database error'}`, 'error');
+      return false;
+    }
+
+    const mapped = mapDbRecipeToFrontend(data);
+    setRecipes((prev) => [mapped, ...prev.filter((r) => r.id !== mapped.id)]);
+    showToast(language === 'mr' ? 'नवीन रेसिपी यशस्वीपणे जोडली!' : 'Recipe created successfully!');
+    return true;
+  };
+
+  const updateRecipe = async (id: string, recipeData: Partial<Recipe>): Promise<boolean> => {
+    const existing = recipes.find((r) => r.id === id);
+    if (!existing) return false;
+
+    const merged = { ...existing, ...recipeData, updatedAt: new Date().toISOString().split('T')[0] };
+    const { data, error } = await supabaseSaveRecipe(mapFrontendRecipeToDb(merged), true);
+    if (error || !data) {
+      showToast(`Error updating recipe: ${error?.message || 'Database error'}`, 'error');
+      return false;
+    }
+
+    const mapped = mapDbRecipeToFrontend(data);
+    setRecipes((prev) => prev.map((r) => (r.id === id ? mapped : r)));
+    showToast(language === 'mr' ? 'रेसिपी अपडेट झाली!' : 'Recipe updated successfully!');
+    return true;
+  };
+
+  const deleteRecipe = async (id: string): Promise<boolean> => {
+    const prev = [...recipes];
+    setRecipes((r) => r.filter((item) => item.id !== id));
+
+    const { success, error } = await supabaseDeleteRecipe(id);
+    if (!success || error) {
+      setRecipes(prev);
+      showToast(`Error deleting recipe: ${error?.message || 'Failed to delete'}`, 'error');
+      return false;
+    }
+
+    showToast(language === 'mr' ? 'रेसिपी हटवली' : 'Recipe deleted successfully', 'info');
+    return true;
+  };
+
+  const toggleRecipePublished = async (id: string) => {
+    const existing = recipes.find((r) => r.id === id);
+    if (!existing) return;
+    await updateRecipe(id, { isPublished: !existing.isPublished });
+  };
+
+  const addRecipeCategory = async (categoryData: Omit<RecipeCategory, 'id'>): Promise<boolean> => {
+    const newCat = {
+      ...categoryData,
+      id: categoryData.slug || 'rcat-' + Date.now(),
+    };
+
+    const { data, error } = await supabaseSaveRecipeCategory({
+      id: newCat.id,
+      name_en: newCat.nameEn,
+      name_mr: newCat.nameMr,
+      slug: newCat.slug,
+      display_order: newCat.displayOrder || recipeCategories.length + 1,
+      image_url: newCat.imageUrl,
+    });
+
+    if (error || !data) {
+      showToast(`Error saving recipe category: ${error?.message || 'Failed'}`, 'error');
+      return false;
+    }
+
+    const mapped = mapDbRecipeCategoryToFrontend(data);
+    setRecipeCategories((prev) => [...prev.filter((c) => c.id !== mapped.id), mapped]);
+    showToast(language === 'mr' ? 'रेसिपी श्रेणी जोडली!' : 'Recipe category added!');
+    return true;
+  };
+
+  const addRecipeSubcategory = async (subData: Omit<RecipeSubcategory, 'id'>): Promise<boolean> => {
+    const newSub = {
+      ...subData,
+      id: subData.slug || 'rsub-' + Date.now(),
+    };
+
+    const { data, error } = await supabaseSaveRecipeSubcategory({
+      id: newSub.id,
+      category_id: newSub.categoryId,
+      name_en: newSub.nameEn,
+      name_mr: newSub.nameMr,
+      slug: newSub.slug,
+    });
+
+    if (error || !data) {
+      showToast(`Error saving subcategory: ${error?.message || 'Failed'}`, 'error');
+      return false;
+    }
+
+    setRecipeCategories((prev) =>
+      prev.map((c) => {
+        if (c.id === newSub.categoryId) {
+          const subs = c.subcategories || [];
+          return {
+            ...c,
+            subcategories: [...subs.filter((s) => s.id !== newSub.id), newSub as RecipeSubcategory],
+          };
+        }
+        return c;
+      })
+    );
+    showToast(language === 'mr' ? 'उप-श्रेणी जोडली!' : 'Subcategory added!');
+    return true;
+  };
+
+  const deleteRecipeCategory = async (id: string): Promise<boolean> => {
+    const prev = [...recipeCategories];
+    setRecipeCategories((c) => c.filter((cat) => cat.id !== id));
+
+    const { success, error } = await supabaseDeleteRecipeCategory(id);
+    if (!success || error) {
+      setRecipeCategories(prev);
+      showToast(`Error deleting recipe category: ${error?.message || 'Failed'}`, 'error');
+      return false;
+    }
+    showToast(language === 'mr' ? 'श्रेणी हटवली' : 'Recipe category deleted', 'info');
+    return true;
   };
 
   const updateLatestVideosLimit = async (limit: number) => {
@@ -1542,6 +1762,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedProductId,
         selectedOrderId,
         selectedCategoryId,
+        selectedRecipeId,
         searchQuery,
         setSearchQuery,
         products,
@@ -1557,6 +1778,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reviews,
         coupons,
         recipes,
+        recipeCategories,
+        addRecipe,
+        updateRecipe,
+        deleteRecipe,
+        toggleRecipePublished,
+        addRecipeCategory,
+        addRecipeSubcategory,
+        deleteRecipeCategory,
         orders,
         isLoadingData,
         fetchError,

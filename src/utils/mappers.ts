@@ -1,4 +1,4 @@
-import { Product, Category, Order, VideoItem, GalleryItem, Review, User } from '../types';
+import { Product, Category, Order, VideoItem, GalleryItem, Review, User, Recipe, RecipeCategory } from '../types';
 
 /**
  * Maps Supabase 'products' row to frontend Product type
@@ -263,5 +263,174 @@ export function mapDbProfileToUser(row: any): User {
     totalOrders: 0,
     totalSpent: 0,
     wishlistCount: 0,
+  };
+}
+
+/**
+ * Maps Supabase 'recipes' row to frontend Recipe type
+ */
+export function mapDbRecipeToFrontend(row: any): Recipe {
+  let imagesArr: string[] = [];
+  if (Array.isArray(row.images)) {
+    imagesArr = row.images;
+  } else if (typeof row.images === 'string') {
+    try {
+      imagesArr = JSON.parse(row.images);
+    } catch {
+      imagesArr = [row.images];
+    }
+  }
+
+  let ingredientsEn: string[] = [];
+  if (Array.isArray(row.ingredients_en)) {
+    ingredientsEn = row.ingredients_en;
+  } else if (typeof row.ingredients_en === 'string') {
+    try {
+      ingredientsEn = JSON.parse(row.ingredients_en);
+    } catch {
+      ingredientsEn = row.ingredients_en.split('\n').filter(Boolean);
+    }
+  }
+
+  let ingredientsMr: string[] = [];
+  if (Array.isArray(row.ingredients_mr)) {
+    ingredientsMr = row.ingredients_mr;
+  } else if (typeof row.ingredients_mr === 'string') {
+    try {
+      ingredientsMr = JSON.parse(row.ingredients_mr);
+    } catch {
+      ingredientsMr = row.ingredients_mr.split('\n').filter(Boolean);
+    }
+  }
+
+  let stepsEn: string[] = [];
+  if (Array.isArray(row.steps_en)) {
+    stepsEn = row.steps_en;
+  } else if (typeof row.steps_en === 'string') {
+    try {
+      stepsEn = JSON.parse(row.steps_en);
+    } catch {
+      stepsEn = row.steps_en.split('\n').filter(Boolean);
+    }
+  }
+
+  let stepsMr: string[] = [];
+  if (Array.isArray(row.steps_mr)) {
+    stepsMr = row.steps_mr;
+  } else if (typeof row.steps_mr === 'string') {
+    try {
+      stepsMr = JSON.parse(row.steps_mr);
+    } catch {
+      stepsMr = row.steps_mr.split('\n').filter(Boolean);
+    }
+  }
+
+  const primaryImg = row.image || row.image_url || imagesArr[0] || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800';
+
+  return {
+    id: String(row.id),
+    titleEn: row.title_en || row.titleEn || row.title || 'Recipe',
+    titleMr: row.title_mr || row.titleMr || row.title || 'रेसिपी',
+    slug: row.slug || String(row.id),
+    descriptionEn: row.description_en || row.descriptionEn || '',
+    descriptionMr: row.description_mr || row.descriptionMr || '',
+    categoryId: row.category_id || row.categoryId || 'traditional',
+    categoryName: row.category_name || row.categoryName || 'Traditional Recipes',
+    subcategoryId: row.subcategory_id || row.subcategoryId || undefined,
+    subcategoryName: row.subcategory_name || row.subcategoryName || undefined,
+    readTime: row.read_time || row.readTime || '5 min read',
+    prepTime: row.prep_time || row.prepTime || '15 mins',
+    cookTime: row.cook_time || row.cookTime || '30 mins',
+    servings: row.servings ? String(row.servings) : '4 Persons',
+    difficulty: (row.difficulty as any) || 'Medium',
+    ingredientsEn,
+    ingredientsMr,
+    stepsEn,
+    stepsMr,
+    tipsEn: row.tips_en || row.tipsEn || '',
+    tipsMr: row.tips_mr || row.tipsMr || '',
+    servingSuggestionsEn: row.serving_suggestions_en || row.servingSuggestionsEn || '',
+    servingSuggestionsMr: row.serving_suggestions_mr || row.servingSuggestionsMr || '',
+    image: primaryImg,
+    images: imagesArr.length > 0 ? imagesArr : [primaryImg],
+    relatedProductId: row.related_product_id || row.relatedProductId || undefined,
+    relatedProductName: row.related_product_name || row.relatedProductName || undefined,
+    author: row.author || 'Dadacha Dhaba Master Chef',
+    isPublished: row.is_published !== undefined ? Boolean(row.is_published) : true,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * Maps frontend Recipe to Supabase 'recipes' database row
+ */
+export function mapFrontendRecipeToDb(r: Recipe): any {
+  return {
+    id: r.id,
+    title_en: r.titleEn,
+    title_mr: r.titleMr,
+    slug: r.slug || r.id,
+    description_en: r.descriptionEn,
+    description_mr: r.descriptionMr,
+    category_id: r.categoryId,
+    category_name: r.categoryName,
+    subcategory_id: r.subcategoryId || null,
+    subcategory_name: r.subcategoryName || null,
+    read_time: r.readTime,
+    prep_time: r.prepTime,
+    cook_time: r.cookTime,
+    servings: r.servings,
+    difficulty: r.difficulty,
+    ingredients_en: r.ingredientsEn,
+    ingredients_mr: r.ingredientsMr,
+    steps_en: r.stepsEn,
+    steps_mr: r.stepsMr,
+    tips_en: r.tipsEn,
+    tips_mr: r.tipsMr,
+    serving_suggestions_en: r.servingSuggestionsEn,
+    serving_suggestions_mr: r.servingSuggestionsMr,
+    image_url: r.image,
+    images: r.images,
+    related_product_id: r.relatedProductId || null,
+    related_product_name: r.relatedProductName || null,
+    author: r.author,
+    is_published: r.isPublished,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Maps Supabase 'recipe_categories' row to frontend RecipeCategory type
+ */
+export function mapDbRecipeCategoryToFrontend(row: any): RecipeCategory {
+  let subcategories: any[] = [];
+  if (Array.isArray(row.subcategories)) {
+    subcategories = row.subcategories;
+  } else if (typeof row.subcategories === 'string') {
+    try {
+      subcategories = JSON.parse(row.subcategories);
+    } catch {
+      subcategories = [];
+    }
+  }
+
+  return {
+    id: String(row.id),
+    nameEn: row.name_en || row.nameEn || 'Category',
+    nameMr: row.name_mr || row.nameMr || row.name_en || 'श्रेणी',
+    slug: row.slug || String(row.id),
+    descriptionEn: row.description_en || row.descriptionEn || '',
+    descriptionMr: row.description_mr || row.descriptionMr || '',
+    imageUrl: row.image_url || row.imageUrl || '',
+    subcategories: subcategories.map((sub: any) => ({
+      id: String(sub.id),
+      categoryId: String(row.id),
+      nameEn: sub.name_en || sub.nameEn || 'Subcategory',
+      nameMr: sub.name_mr || sub.nameMr || sub.name_en || 'उपश्रेणी',
+      slug: sub.slug || String(sub.id),
+    })),
+    displayOrder: Number(row.display_order || row.displayOrder) || 1,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
   };
 }

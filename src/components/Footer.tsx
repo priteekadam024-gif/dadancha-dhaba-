@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { DhabaLogo } from './DhabaLogo';
 import { 
   Phone, Mail, MapPin, Instagram, Youtube, Facebook, 
-  Send, Heart, ShieldCheck, Truck, RefreshCw, Award 
+  Send, Heart, ShieldCheck, Truck, Award 
 } from 'lucide-react';
 
 export const Footer: React.FC = () => {
@@ -25,9 +25,9 @@ export const Footer: React.FC = () => {
 
   return (
     <footer className="bg-[#0A0A0A] text-zinc-300 border-t border-[#F4B400]/20 pt-12 pb-8">
-      {/* Guarantees Bar */}
+      {/* Guarantees / Service Benefits Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-[#141414] border border-[#F4B400]/20 rounded-2xl shadow-xl text-center md:text-left">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 p-6 bg-[#141414] border border-[#F4B400]/20 rounded-2xl shadow-xl text-center md:text-left">
           <div className="flex flex-col md:flex-row items-center gap-3">
             <div className="p-3 bg-[#F4B400]/10 text-[#F4B400] rounded-xl">
               <Award className="w-6 h-6" />
@@ -51,7 +51,7 @@ export const Footer: React.FC = () => {
                 {language === 'mr' ? 'वेगवान होम डिलिव्हरी' : 'Express Home Delivery'}
               </h4>
               <p className="text-xs text-zinc-400">
-                {language === 'mr' ? 'संपूर्ण महाराष्ट्रात २-४ दिवसांत' : '2-4 days across India'}
+                {language === 'mr' ? 'संपूर्ण भारतात ३-५ दिवसांत' : '3-5 days across India'}
               </p>
             </div>
           </div>
@@ -66,20 +66,6 @@ export const Footer: React.FC = () => {
               </h4>
               <p className="text-xs text-zinc-400">
                 {language === 'mr' ? 'UPI, Razorpay व COD उपलब्ध' : 'UPI, PhonePe & COD Ready'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row items-center gap-3">
-            <div className="p-3 bg-[#F4B400]/10 text-[#F4B400] rounded-xl">
-              <RefreshCw className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-white text-sm">
-                {language === 'mr' ? 'सोपी परतावा पद्धत' : 'Easy Replacement'}
-              </h4>
-              <p className="text-xs text-zinc-400">
-                {language === 'mr' ? '७ दिवसांची खात्रीशीर सेवा' : '7 Days Hassel-free Guarantee'}
               </p>
             </div>
           </div>

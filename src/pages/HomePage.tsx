@@ -328,6 +328,84 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
+      {/* FEATURED WRITTEN RECIPES SECTION */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-zinc-800 pb-4">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 bg-[#F4B400]/10 border border-[#F4B400]/30 px-3 py-1 rounded-full">
+              <BookOpen className="w-3.5 h-3.5 text-[#F4B400]" />
+              <span className="text-[11px] font-bold text-[#F4B400] tracking-wider uppercase">
+                {language === 'mr' ? 'लेखी पाककृती' : 'Written Pure Veg Recipes'}
+              </span>
+            </div>
+            <h2 className="text-3xl font-black text-white font-marathi">
+              {language === 'mr' ? 'दादांच्या गुपित शाकाहारी पाककृती' : "Dada's Secret Pure Veg Recipes"}
+            </h2>
+            <p className="text-xs text-zinc-400">
+              {language === 'mr' ? 'साहित्य, प्रमाण आणि पायरीनुसार अस्सल ढाबा स्टाईल पाककृती' : 'Step-by-step written cooking recipes with exact spice measurements'}
+            </p>
+          </div>
+
+          <button
+            onClick={() => navigateTo('recipes')}
+            className="text-xs text-[#F4B400] hover:underline font-bold flex items-center gap-1.5 self-start md:self-auto"
+          >
+            <span>{language === 'mr' ? 'सर्व पाककृती पहा' : 'Explore All Recipes'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {recipes.slice(0, 3).map((rec) => (
+            <div
+              key={rec.id}
+              onClick={() => navigateTo('recipe-detail', { recipeId: rec.id })}
+              className="bg-[#161616] border border-zinc-800 hover:border-[#F4B400]/50 rounded-3xl overflow-hidden shadow-xl flex flex-col justify-between cursor-pointer group transition-all duration-300 hover:-translate-y-1"
+            >
+              <div className="relative aspect-video bg-black overflow-hidden">
+                <img
+                  src={rec.image || (rec.images && rec.images[0]) || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&q=80&w=800'}
+                  alt={rec.titleEn}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute top-3 left-3 bg-[#111111]/85 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-[#F4B400] border border-[#F4B400]/40">
+                  {rec.difficulty || 'Medium'}
+                </div>
+                <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-emerald-400 border border-emerald-500/40">
+                  100% Veg
+                </div>
+              </div>
+
+              <div className="p-5 space-y-2 flex-1">
+                <div className="flex items-center gap-3 text-[11px] text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#F4B400]" /> {rec.prepTime || '15m'} prep
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 text-amber-500" /> {rec.cookTime || '25m'} cook
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold text-white font-marathi group-hover:text-[#F4B400] transition-colors line-clamp-1">
+                  {language === 'mr' ? rec.titleMr : rec.titleEn}
+                </h3>
+
+                <p className="text-xs text-zinc-400 line-clamp-2 font-marathi">
+                  {language === 'mr' ? ((rec as any).descriptionMr || rec.titleMr) : ((rec as any).descriptionEn || rec.titleEn)}
+                </p>
+              </div>
+
+              <div className="p-5 pt-0">
+                <div className="w-full bg-[#1F1F1F] group-hover:bg-[#F4B400] group-hover:text-[#111111] text-white font-bold text-xs py-2.5 rounded-xl border border-zinc-700 transition-colors flex items-center justify-center gap-2">
+                  <span>{language === 'mr' ? 'पाककृती वाचा' : 'Read Recipe'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* WHY CHOOSE DADACHA DHABA */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <div className="text-center space-y-2">

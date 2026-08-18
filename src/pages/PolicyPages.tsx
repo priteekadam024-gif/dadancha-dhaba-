@@ -135,7 +135,7 @@ export const PolicyPages: React.FC<PolicyProps> = ({ type }) => {
                 {language === 'mr' ? 'प्र. डिलिव्हरी किती दिवसांत मिळते?' : 'Q. How long does delivery take?'}
               </h3>
               <p className="text-zinc-400">
-                {language === 'mr' ? 'उत्तर: संपूर्ण महाराष्ट्रात २ ते ३ दिवसांत पार्सल पोहोचते.' : 'Ans: Delivery typically arrives within 2-4 business days across India.'}
+                {language === 'mr' ? 'उत्तर: संपूर्ण महाराष्ट्रात ३ ते ५ दिवसांत पार्सल पोहोचते.' : 'Ans: Delivery typically arrives within 3-5 business days across India.'}
               </p>
             </div>
           </div>

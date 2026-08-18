@@ -249,17 +249,29 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // 1. Prepare exact DB payload matching existing columns in public.site_settings
       const dbPayload = {
         site_name: merged.siteName || 'Dadacha Dhaba',
+        tagline_mr: merged.taglineMr || 'चव आमची ओळख तुमची ! ❤️',
+        tagline_en: merged.taglineEn || 'Taste, Service & Authentic Dhaba Love ❤️',
         logo_url: merged.logoUrl,
         logo_storage_path: merged.logoStoragePath || null,
         favicon_url: merged.faviconUrl,
         favicon_storage_path: merged.faviconStoragePath || null,
+        login_logo_url: merged.loginLogoUrl || null,
+        admin_logo_url: merged.adminLogoUrl || null,
+        invoice_logo_url: merged.invoiceLogoUrl || null,
         og_image_url: merged.ogImageUrl || null,
         og_image_storage_path: merged.ogImageUrl || null,
+        use_global_for_favicon: merged.useGlobalForFavicon ?? true,
+        use_global_for_login: merged.useGlobalForLogin ?? true,
+        use_global_for_admin: merged.useGlobalForAdmin ?? true,
+        use_global_for_invoice: merged.useGlobalForInvoice ?? true,
+        use_global_for_og: merged.useGlobalForOg ?? true,
         use_global_logo_for_header: true,
         use_global_logo_for_footer: true,
         use_global_logo_for_login: merged.useGlobalForLogin ?? true,
         use_global_logo_for_admin: merged.useGlobalForAdmin ?? true,
         use_global_logo_for_invoice: merged.useGlobalForInvoice ?? true,
+        history: merged.history || [],
+        updated_at: new Date().toISOString(),
       };
 
       // 2. Save to Supabase Database FIRST

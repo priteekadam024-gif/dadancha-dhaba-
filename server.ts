@@ -23,6 +23,198 @@ const ADMIN_TOKENS = new Set<string>(['admin-session-token', 'dadacha-admin-secr
 // In-memory media store fallback
 const inMemoryMediaFiles: any[] = [];
 
+// In-memory recipe categories fallback
+const inMemoryRecipeCategories: any[] = [
+  {
+    id: 'cat-curries',
+    name_en: 'Maharashtrian Curries & Rassa',
+    name_mr: 'गावरान रस्सा व आमटी',
+    slug: 'curries-rassa',
+    description_en: 'Authentic spicy and flavorful Maharashtrian curry recipes',
+    description_mr: 'अस्सल गावरान काळा व तांबडा रस्सा पाककृती',
+    display_order: 1,
+    is_active: true,
+  },
+  {
+    id: 'cat-subji',
+    name_en: 'Dhaba Style Sabzi',
+    name_mr: 'ढाबा स्पेशल भाज्या',
+    slug: 'dhaba-sabzi',
+    description_en: 'Restaurant style rich vegetable preparations',
+    description_mr: 'हॉटेलसारख्या चमचमीत भाज्या',
+    display_order: 2,
+    is_active: true,
+  },
+  {
+    id: 'cat-dal',
+    name_en: 'Varan & Pithla Specials',
+    name_mr: 'वरण आणि पिठलं भाकरी',
+    slug: 'varan-pithla',
+    description_en: 'Comfort home-style Maharashtrian traditional staples',
+    description_mr: 'पारंपरिक चविष्ट वरण आणि झुणका पिठलं',
+    display_order: 3,
+    is_active: true,
+  },
+  {
+    id: 'cat-snacks',
+    name_en: 'Maharashtrian Snacks & Starters',
+    name_mr: 'खमंग नाश्ता आणि स्नॅक्स',
+    slug: 'snacks-starters',
+    description_en: 'Quick crispy delicacies made with authentic spices',
+    description_mr: 'चमचमीत गावरान नाश्ता',
+    display_order: 4,
+    is_active: true,
+  },
+];
+
+const inMemoryRecipeSubcategories: any[] = [
+  { id: 'sub-kala-rassa', category_id: 'cat-curries', name_en: 'Kala Rassa Special', name_mr: 'काळा रस्सा स्पेशल', slug: 'kala-rassa' },
+  { id: 'sub-shev-bhaji', category_id: 'cat-subji', name_en: 'Shev Bhaji & Batata', name_mr: 'शेव भाजी व बटाटा रस्सा', slug: 'shev-bhaji' },
+  { id: 'sub-pithla', category_id: 'cat-dal', name_en: 'Zunka Pithla', name_mr: 'झुणका पिठलं', slug: 'zunka-pithla' },
+  { id: 'sub-misal', category_id: 'cat-snacks', name_en: 'Kolhapuri Misal', name_mr: 'कोल्हापुरी मिसळ', slug: 'kolhapuri-misal' },
+];
+
+const inMemoryRecipes: any[] = [
+  {
+    id: 'rec-1',
+    title_en: 'Authentic Kolhapuri Pure Veg Kala Rassa',
+    title_mr: 'अस्सल कोल्हापुरी शाकाहारी काळा रस्सा',
+    slug: 'authentic-kolhapuri-kala-rassa',
+    description_en: 'Rich, intensely aromatic traditional black gravy curry made with Dadacha Dhaba Special Kala Masala, roasted dry coconut, and caramelized onions.',
+    description_mr: 'दादाचा ढाबा स्पेशल काळा मसाला, भाजलेले सुके खोबरे आणि खरपूस कांद्याचे वाटण वापरून तयार केलेला चमचमीत काळा रस्सा.',
+    category_id: 'cat-curries',
+    category_name: 'Maharashtrian Curries & Rassa',
+    subcategory_id: 'sub-kala-rassa',
+    subcategory_name: 'Kala Rassa Special',
+    prep_time: '15 mins',
+    cook_time: '25 mins',
+    servings: '4',
+    difficulty: 'Medium',
+    ingredients_en: [
+      '2 tbsp Dadacha Dhaba Special Kala Masala',
+      '1 cup Grated dry coconut (roasted until dark golden brown)',
+      '2 large Onions (thinly sliced and roasted with 1 tsp oil until dark)',
+      '8-10 Garlic cloves and 1 inch Ginger',
+      '1/4 cup Fresh coriander leaves with stems',
+      '2 tbsp Cooking oil',
+      '1 tsp Mustard seeds and Cumin seeds',
+      '1/2 tsp Turmeric powder',
+      'Salt to taste',
+      '3 cups Hot water'
+    ],
+    ingredients_mr: [
+      '२ मोठे चमचे दादाचा ढाबा स्पेशल काळा मसाला',
+      '१ कप सुके खोबरे (काळे-तपकिरी होईपर्यंत भाजलेले)',
+      '२ मोठे कांदे (उभे चिरून खरपूस भाजलेले)',
+      '८-१० लसूण पाकळ्या आणि १ इंच आले',
+      '१/४ कप ताजी कोथिंबीर',
+      '२ मोठे चमचे तेल',
+      '१ छोटा चमचा मोहरी आणि जिरे',
+      '१/२ छोटा चमचा हळद',
+      'चवीनुसार मीठ',
+      '३ कप गरम पाणी'
+    ],
+    steps_en: [
+      'Roast sliced onions and dry coconut in a pan with minimal oil until deep golden-brown with charred edges.',
+      'Grind the roasted onion, coconut, garlic, ginger, and coriander into a smooth, thick black paste (Kala Vatan) adding minimal water.',
+      'Heat 2 tbsp oil in a heavy-bottomed pot. Add mustard seeds, cumin seeds, and a pinch of asafoetida.',
+      'Add the prepared Kala Vatan paste and sauté on medium-low heat for 6-8 minutes until oil separates from the edges.',
+      'Add Dadacha Dhaba Special Kala Masala, turmeric powder, and salt. Sauté for 1 more minute until fragrant.',
+      'Pour in 3 cups of boiling hot water while stirring continuously to achieve the desired spicy broth consistency.',
+      'Simmer on low heat for 12-15 minutes until a deep glossy oil layer (tarri/kat) floats to the top.',
+      'Garnish with freshly chopped coriander and serve piping hot with Bhakri or steamed Indrayani rice.'
+    ],
+    steps_mr: [
+      'कढईत थोडे तेल घालून कांदा आणि खोबरे लालसर-काळे होईपर्यंत खमंग भाजून घ्या.',
+      'भाजलेला कांदा, खोबरे, आले, लसूण व कोथिंबीर एकत्र करून थोडे पाणी घालून मऊ काळे वाटण तयार करा.',
+      'कढईत तेल गरम करून मोहरी, जिरे आणि हिंगाची फोडणी द्या.',
+      'तयार केलेले वाटण तेलात घालून मंद आचेवर तेल सुटेपर्यंत ६ ते ८ मिनिटे चांगले परता.',
+      'त्यात दादाचा ढाबा काळा मसाला, हळद आणि मीठ घालून १ मिनिट परता.',
+      'गरम पाणी ओतून रस्सा एकजीव करा आणि मंद आचेवर १०-१२ मिनिटे उकळू द्या जेणेकरून रश्श्यावर छान तरी (कट) येईल.',
+      'बारीक चिरलेली कोथिंबीर घालून गरमागरम बाजरीची किंवा ज्वारीची भाकरी आणि इंद्रायणी भातासोबत सर्व्ह करा.'
+    ],
+    tips_en: 'Always roast coconut and onion slowly on low heat to achieve authentic Kolhapuri deep color without burning the spices.',
+    tips_mr: 'कांदा आणि खोबरे मंद आचेवर भाजल्यास रश्श्याला अस्सल गडद रंग आणि चव येते.',
+    serving_suggestions_en: 'Serve with fresh Jowar/Bajra Bhakri, sliced red onions, and lemon wedges.',
+    serving_suggestions_mr: 'गरमागरम ज्वारीची किंवा बाजरीची भाकरी, कांदा आणि लिंबासोबत आस्वाद घ्या.',
+    image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800'
+    ],
+    related_product_id: 'prod-kala-masala',
+    related_product_name: 'Dadacha Dhaba Special Kala Masala',
+    author: 'Dada',
+    is_published: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'rec-2',
+    title_en: 'Dhaba Style Kanda Lasun Shev Bhaji',
+    title_mr: 'ढाबा स्टाईल चमचमीत कांदा लसूण शेव भाजी',
+    slug: 'dhaba-style-shev-bhaji',
+    description_en: 'Famous Maharashtrian Dhaba style fiery curry packed with crispy Ghati thick shev, simmered in fresh onion garlic gravy with rich red chili oil.',
+    description_mr: 'अस्सल ढाब्यावर मिळते तशी तिखट आणि झणझणीत शेव भाजी, दादांच्या कांदा लसूण मसाल्याची खास चव.',
+    category_id: 'cat-subji',
+    category_name: 'Dhaba Style Sabzi',
+    subcategory_id: 'sub-shev-bhaji',
+    subcategory_name: 'Shev Bhaji & Batata',
+    prep_time: '10 mins',
+    cook_time: '15 mins',
+    servings: '3',
+    difficulty: 'Easy',
+    ingredients_en: [
+      '1 cup Spicy thick Ghati Bhavnagri Shev',
+      '2 tbsp Dadacha Dhaba Kanda Lasun Masala',
+      '2 Finely chopped onions',
+      '1 Chopped tomato',
+      '1 tbsp Ginger-garlic paste',
+      '2 tbsp Oil',
+      '1/2 tsp Cumin seeds',
+      'Salt to taste',
+      '2 cups Warm water'
+    ],
+    ingredients_mr: [
+      '१ कप जाड गाठी शेव किंवा तिखट शेव',
+      '२ मोठे चमचे दादाचा ढाबा कांदा लसूण मसाला',
+      '२ बारीक चिरलेले कांदे',
+      '१ बारीक चिरलेला टोमॅटो',
+      '१ मोठा चमचा आले-लसूण पेस्ट',
+      '२ मोठे चमचे तेल',
+      '१/२ छोटा चमचा जिरे',
+      'चवीनुसार मीठ',
+      '२ कप कोमट पाणी'
+    ],
+    steps_en: [
+      'Heat oil in a pan, add cumin seeds and finely chopped onions. Sauté till golden brown.',
+      'Add ginger garlic paste and sauté for a minute until raw aroma disappears.',
+      'Add chopped tomatoes and cook until soft and mushy.',
+      'Add Dadacha Dhaba Kanda Lasun Masala and salt. Sauté on low flame until oil oozes out.',
+      'Add warm water, bring the gravy to a rolling boil, then simmer for 8 minutes to form spicy rassa.',
+      'Do not add shev directly while boiling. Place crispy shev in a bowl, pour hot rassa over it just before eating.'
+    ],
+    steps_mr: [
+      'कढईत तेल गरम करून जिरे आणि बारीक चिरलेला कांदा सोनेरी रंगावर परतून घ्या.',
+      'आले-लसूण पेस्ट घालून परता आणि टोमॅटो मऊ होईपर्यंत शिजवा.',
+      'दादाचा ढाबा कांदा लसूण मसाला व मीठ घालून मंद आचेवर तेल सुटेपर्यंत खमंग परता.',
+      'गरम पाणी घालून रश्श्याला चांगली उकळी येऊ द्या आणि ५-७ मिनिटे मंद आचेवर शिजू द्या.',
+      'शेव आधीच रश्श्यात न टाकता, जेवताना वाटीत शेव घेऊन त्यावर गरमागरम रस्सा ओतून लगेच सर्व्ह करा.'
+    ],
+    tips_en: 'Always keep shev separate and pour hot curry on top immediately before eating to maintain crispiness.',
+    tips_mr: 'शेव मऊ पडू नये म्हणून जेवतानाच रस्सा शेववर ओतावा.',
+    serving_suggestions_en: 'Pair with hot Tandoori Roti or Chapati and sliced raw onion.',
+    serving_suggestions_mr: 'गरमागरम चपाती किंवा भाकरीसोबत सर्व्ह करा.',
+    image: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&q=80&w=800',
+    images: ['https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&q=80&w=800'],
+    related_product_id: 'prod-kanda-lasun',
+    related_product_name: 'Dadacha Dhaba Kanda Lasun Masala',
+    author: 'Dada',
+    is_published: true,
+    created_at: new Date().toISOString()
+  }
+];
+
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -715,27 +907,19 @@ async function startServer() {
 
       const { data: existingRows } = await supabase
         .from('site_settings')
-        .select('id')
+        .select('*')
         .order('updated_at', { ascending: false })
         .limit(1);
 
-      const existingId = existingRows?.[0]?.id;
+      const existingRecord = existingRows?.[0];
+      const existingId = existingRecord?.id;
 
-      const recordPayload = {
-        site_name: settings.site_name || 'Dadacha Dhaba',
-        logo_url: settings.logo_url || null,
-        logo_storage_path: settings.logo_storage_path || null,
-        favicon_url: settings.favicon_url || null,
-        favicon_storage_path: settings.favicon_storage_path || null,
-        og_image_url: settings.og_image_url || null,
-        og_image_storage_path: settings.og_image_storage_path || null,
-        use_global_logo_for_header: settings.use_global_logo_for_header ?? true,
-        use_global_logo_for_footer: settings.use_global_logo_for_footer ?? true,
-        use_global_logo_for_login: settings.use_global_logo_for_login ?? true,
-        use_global_logo_for_admin: settings.use_global_logo_for_admin ?? true,
-        use_global_logo_for_invoice: settings.use_global_logo_for_invoice ?? true,
+      const recordPayload: Record<string, any> = {
+        ...(existingRecord || {}),
+        ...settings,
         updated_at: new Date().toISOString()
       };
+      delete recordPayload.id;
 
       let result;
       if (existingId) {
@@ -1162,6 +1346,245 @@ async function startServer() {
       { month: 'Mar', revenue: 68000 }
     ]
   }));
+
+  // RECIPES API ENDPOINTS
+  app.get('/api/recipes', async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        return res.json({ success: true, recipes: inMemoryRecipes });
+      }
+      return res.json({ success: true, recipes: data });
+    } catch (err: any) {
+      return res.json({ success: true, recipes: inMemoryRecipes });
+    }
+  });
+
+  app.get('/api/recipes/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .or(`id.eq.${id},slug.eq.${id}`)
+        .maybeSingle();
+
+      if (error || !data) {
+        const found = inMemoryRecipes.find((r) => r.id === id || r.slug === id);
+        if (found) return res.json({ success: true, recipe: found });
+        return res.status(404).json({ success: false, error: 'Recipe not found' });
+      }
+      return res.json({ success: true, recipe: data });
+    } catch (err: any) {
+      const found = inMemoryRecipes.find((r) => r.id === req.params.id || r.slug === req.params.id);
+      if (found) return res.json({ success: true, recipe: found });
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/recipes', requireAdminAuth, async (req, res) => {
+    try {
+      const payload = { ...req.body };
+      if (!payload.title_en && !payload.titleEn) {
+        return res.status(400).json({ success: false, error: 'Recipe title in English is required' });
+      }
+
+      if (!payload.id) {
+        payload.id = 'rec-' + Date.now();
+      }
+      payload.slug = payload.slug || (payload.title_en || payload.titleEn).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      payload.created_at = payload.created_at || new Date().toISOString();
+      payload.updated_at = new Date().toISOString();
+
+      // Update in-memory fallback
+      const existingIdx = inMemoryRecipes.findIndex((r) => r.id === payload.id);
+      if (existingIdx >= 0) {
+        inMemoryRecipes[existingIdx] = { ...inMemoryRecipes[existingIdx], ...payload };
+      } else {
+        inMemoryRecipes.unshift(payload);
+      }
+
+      const { data, error } = await supabase
+        .from('recipes')
+        .upsert([payload], { onConflict: 'id' })
+        .select();
+
+      if (error) {
+        console.warn('Supabase recipes upsert notice (using in-memory fallback):', error.message);
+        return res.json({ success: true, recipe: payload });
+      }
+
+      return res.json({ success: true, recipe: data?.[0] || payload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put('/api/admin/recipes/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const payload = { ...req.body, id, updated_at: new Date().toISOString() };
+
+      const existingIdx = inMemoryRecipes.findIndex((r) => r.id === id);
+      if (existingIdx >= 0) {
+        inMemoryRecipes[existingIdx] = { ...inMemoryRecipes[existingIdx], ...payload };
+      } else {
+        inMemoryRecipes.unshift(payload);
+      }
+
+      const { data, error } = await supabase
+        .from('recipes')
+        .upsert([payload], { onConflict: 'id' })
+        .select();
+
+      if (error) {
+        console.warn('Supabase recipes update notice (using in-memory fallback):', error.message);
+        return res.json({ success: true, recipe: payload });
+      }
+
+      return res.json({ success: true, recipe: data?.[0] || payload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/recipes/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existingIdx = inMemoryRecipes.findIndex((r) => r.id === id);
+      if (existingIdx >= 0) {
+        inMemoryRecipes.splice(existingIdx, 1);
+      }
+
+      const { error } = await supabase.from('recipes').delete().eq('id', id);
+      if (error) {
+        console.warn('Supabase recipes delete notice:', error.message);
+      }
+
+      return res.json({ success: true, message: `Recipe ${id} deleted successfully` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // RECIPE CATEGORIES API ENDPOINTS
+  app.get('/api/recipe-categories', async (_req, res) => {
+    try {
+      const { data: catData, error: catErr } = await supabase
+        .from('recipe_categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      const { data: subData } = await supabase
+        .from('recipe_subcategories')
+        .select('*');
+
+      if (catErr || !catData || catData.length === 0) {
+        const result = inMemoryRecipeCategories.map((c) => ({
+          ...c,
+          subcategories: inMemoryRecipeSubcategories.filter((s) => s.category_id === c.id)
+        }));
+        return res.json({ success: true, categories: result });
+      }
+
+      const subList = subData || inMemoryRecipeSubcategories;
+      const combined = catData.map((c: any) => ({
+        ...c,
+        subcategories: subList.filter((s: any) => s.category_id === c.id)
+      }));
+
+      return res.json({ success: true, categories: combined });
+    } catch (err: any) {
+      const result = inMemoryRecipeCategories.map((c) => ({
+        ...c,
+        subcategories: inMemoryRecipeSubcategories.filter((s) => s.category_id === c.id)
+      }));
+      return res.json({ success: true, categories: result });
+    }
+  });
+
+  app.post('/api/admin/recipe-categories', requireAdminAuth, async (req, res) => {
+    try {
+      const payload = { ...req.body };
+      if (!payload.name_en && !payload.nameEn) {
+        return res.status(400).json({ success: false, error: 'Category name (English) is required' });
+      }
+
+      if (!payload.id) {
+        payload.id = 'rcat-' + Date.now();
+      }
+      payload.slug = payload.slug || (payload.name_en || payload.nameEn).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      payload.created_at = payload.created_at || new Date().toISOString();
+      payload.updated_at = new Date().toISOString();
+
+      const existingIdx = inMemoryRecipeCategories.findIndex((c) => c.id === payload.id);
+      if (existingIdx >= 0) {
+        inMemoryRecipeCategories[existingIdx] = { ...inMemoryRecipeCategories[existingIdx], ...payload };
+      } else {
+        inMemoryRecipeCategories.push(payload);
+      }
+
+      const { data, error } = await supabase
+        .from('recipe_categories')
+        .upsert([payload], { onConflict: 'id' })
+        .select();
+
+      return res.json({ success: true, category: data?.[0] || payload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/recipe-subcategories', requireAdminAuth, async (req, res) => {
+    try {
+      const payload = { ...req.body };
+      if (!payload.name_en && !payload.nameEn) {
+        return res.status(400).json({ success: false, error: 'Subcategory name (English) is required' });
+      }
+      if (!payload.category_id && !payload.categoryId) {
+        return res.status(400).json({ success: false, error: 'Parent Category ID is required' });
+      }
+
+      if (!payload.id) {
+        payload.id = 'rsub-' + Date.now();
+      }
+      payload.slug = payload.slug || (payload.name_en || payload.nameEn).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      payload.created_at = new Date().toISOString();
+
+      const existingIdx = inMemoryRecipeSubcategories.findIndex((s) => s.id === payload.id);
+      if (existingIdx >= 0) {
+        inMemoryRecipeSubcategories[existingIdx] = { ...inMemoryRecipeSubcategories[existingIdx], ...payload };
+      } else {
+        inMemoryRecipeSubcategories.push(payload);
+      }
+
+      const { data, error } = await supabase
+        .from('recipe_subcategories')
+        .upsert([payload], { onConflict: 'id' })
+        .select();
+
+      return res.json({ success: true, subcategory: data?.[0] || payload });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/recipe-categories/:id', requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const idx = inMemoryRecipeCategories.findIndex((c) => c.id === id);
+      if (idx >= 0) inMemoryRecipeCategories.splice(idx, 1);
+
+      await supabase.from('recipe_categories').delete().eq('id', id);
+      return res.json({ success: true, message: `Recipe category ${id} deleted` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   // Vite middleware for dev / static serving in production
   if (process.env.NODE_ENV !== 'production') {

@@ -920,20 +920,13 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
     const existing = await supabaseGetSiteSettings();
 
     const recordPayload: Record<string, any> = {
-      site_name: settingsRecord.site_name || 'Dadacha Dhaba',
-      logo_url: settingsRecord.logo_url || null,
-      logo_storage_path: settingsRecord.logo_storage_path || null,
-      favicon_url: settingsRecord.favicon_url || null,
-      favicon_storage_path: settingsRecord.favicon_storage_path || null,
-      og_image_url: settingsRecord.og_image_url || null,
-      og_image_storage_path: settingsRecord.og_image_storage_path || null,
-      use_global_logo_for_header: settingsRecord.use_global_logo_for_header ?? true,
-      use_global_logo_for_footer: settingsRecord.use_global_logo_for_footer ?? true,
-      use_global_logo_for_login: settingsRecord.use_global_logo_for_login ?? true,
-      use_global_logo_for_admin: settingsRecord.use_global_logo_for_admin ?? true,
-      use_global_logo_for_invoice: settingsRecord.use_global_logo_for_invoice ?? true,
+      ...(existing || {}),
+      ...settingsRecord,
       updated_at: new Date().toISOString(),
     };
+
+    // Remove primary key from update payload if it exists
+    delete recordPayload.id;
 
     let result;
     if (existing?.id) {
@@ -1217,5 +1210,263 @@ export async function supabaseDeleteMediaRecord(id: string, storagePath?: string
     return { success: false, error: err };
   }
 }
+
+/**
+ * Fetch recipes from backend/Supabase
+ */
+export async function supabaseGetRecipes() {
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/api/recipes`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.recipes)) {
+        return json.recipes;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend /api/recipes notice:', err);
+  }
+
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save or update recipe
+ */
+export async function supabaseSaveRecipe(recipeRecord: any, isUpdate: boolean = false) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const url = isUpdate
+      ? `${apiBase}/api/admin/recipes/${encodeURIComponent(recipeRecord.id)}`
+      : `${apiBase}/api/admin/recipes`;
+
+    const res = await fetch(url, {
+      method: isUpdate ? 'PUT' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(recipeRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.recipe) {
+        return { data: json.recipe, error: null };
+      }
+    }
+  } catch (err) {
+    console.warn('Backend recipe save error, attempting Supabase direct client:', err);
+  }
+
+  if (!supabase) return { data: recipeRecord, error: null };
+  try {
+    const { data, error } = await supabase
+      .from('recipes')
+      .upsert([recipeRecord], { onConflict: 'id' })
+      .select();
+
+    return { data: data?.[0] || recipeRecord, error: error || null };
+  } catch (err: any) {
+    return { data: recipeRecord, error: null };
+  }
+}
+
+/**
+ * Delete recipe
+ */
+export async function supabaseDeleteRecipe(id: string) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const res = await fetch(`${apiBase}/api/admin/recipes/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {
+        'x-admin-token': adminToken,
+      },
+    });
+
+    if (res.ok) {
+      return { success: true, error: null };
+    }
+  } catch (err) {
+    console.warn('Backend recipe delete notice:', err);
+  }
+
+  if (!supabase) return { success: true, error: null };
+  try {
+    const { error } = await supabase.from('recipes').delete().eq('id', id);
+    return { success: !error, error };
+  } catch (err: any) {
+    return { success: true, error: null };
+  }
+}
+
+/**
+ * Fetch recipe categories and their subcategories
+ */
+export async function supabaseGetRecipeCategories() {
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(`${apiBase}/api/recipe-categories`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.categories)) {
+        return json.categories;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend recipe-categories notice:', err);
+  }
+
+  if (!supabase) return [];
+  try {
+    const { data: catData } = await supabase
+      .from('recipe_categories')
+      .select('*')
+      .order('display_order', { ascending: true });
+
+    const { data: subData } = await supabase
+      .from('recipe_subcategories')
+      .select('*');
+
+    if (!catData) return [];
+
+    const subList = subData || [];
+    return catData.map((c: any) => ({
+      ...c,
+      subcategories: subList.filter((s: any) => s.category_id === c.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save recipe category
+ */
+export async function supabaseSaveRecipeCategory(catRecord: any) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const res = await fetch(`${apiBase}/api/admin/recipe-categories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(catRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.category) {
+        return { data: json.category, error: null };
+      }
+    }
+  } catch (err) {
+    console.warn('Save recipe category notice:', err);
+  }
+
+  if (!supabase) return { data: catRecord, error: null };
+  try {
+    const { data, error } = await supabase
+      .from('recipe_categories')
+      .upsert([catRecord], { onConflict: 'id' })
+      .select();
+
+    return { data: data?.[0] || catRecord, error };
+  } catch (err: any) {
+    return { data: catRecord, error: null };
+  }
+}
+
+/**
+ * Save recipe subcategory
+ */
+export async function supabaseSaveRecipeSubcategory(subRecord: any) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const res = await fetch(`${apiBase}/api/admin/recipe-subcategories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken,
+      },
+      body: JSON.stringify(subRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.subcategory) {
+        return { data: json.subcategory, error: null };
+      }
+    }
+  } catch (err) {
+    console.warn('Save recipe subcategory notice:', err);
+  }
+
+  if (!supabase) return { data: subRecord, error: null };
+  try {
+    const { data, error } = await supabase
+      .from('recipe_subcategories')
+      .upsert([subRecord], { onConflict: 'id' })
+      .select();
+
+    return { data: data?.[0] || subRecord, error };
+  } catch (err: any) {
+    return { data: subRecord, error: null };
+  }
+}
+
+/**
+ * Delete recipe category
+ */
+export async function supabaseDeleteRecipeCategory(id: string) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const adminToken = getAdminAuthToken();
+
+    const res = await fetch(`${apiBase}/api/admin/recipe-categories/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {
+        'x-admin-token': adminToken,
+      },
+    });
+
+    if (res.ok) {
+      return { success: true, error: null };
+    }
+  } catch (err) {
+    console.warn('Delete recipe category notice:', err);
+  }
+
+  if (!supabase) return { success: true, error: null };
+  try {
+    const { error } = await supabase.from('recipe_categories').delete().eq('id', id);
+    return { success: !error, error };
+  } catch (err: any) {
+    return { success: true, error: null };
+  }
+}
+
 
 

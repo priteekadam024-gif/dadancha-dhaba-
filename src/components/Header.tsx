@@ -44,7 +44,7 @@ export const Header: React.FC = () => {
 
           <div className="hidden md:flex items-center gap-4 text-[11px] font-semibold">
             <span className="flex items-center gap-1">
-              <Truck className="w-3 h-3" /> {language === 'mr' ? '२-४ दिवसांत होम डिलिव्हरी' : 'Fast 2-4 Days Shipping'}
+              <Truck className="w-3 h-3" /> {language === 'mr' ? '३-५ दिवसांत होम डिलिव्हरी' : 'Fast 3-5 Days Shipping'}
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3" /> {language === 'mr' ? 'पुणे | कोल्हापूर | मुंबई' : 'Pune | Kolhapur | Mumbai'}

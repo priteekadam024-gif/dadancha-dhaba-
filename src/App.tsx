@@ -16,6 +16,7 @@ import { GalleryPage } from './pages/GalleryPage';
 import { ContactPage } from './pages/ContactPage';
 import { AboutPage } from './pages/AboutPage';
 import { RecipesPage } from './pages/RecipesPage';
+import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { CartPage } from './pages/CartPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { WishlistPage } from './pages/WishlistPage';
@@ -52,6 +53,8 @@ const MainContent: React.FC = () => {
         return <AboutPage />;
       case 'recipes':
         return <RecipesPage />;
+      case 'recipe-detail':
+        return <RecipeDetailPage />;
       case 'cart':
         return <CartPage />;
       case 'checkout':

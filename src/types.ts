@@ -18,6 +18,7 @@ export type NavigationPage =
   | 'register'
   | 'forgot-password'
   | 'recipes'
+  | 'recipe-detail'
   | 'about'
   | 'privacy'
   | 'privacy-policy'
@@ -60,6 +61,19 @@ export interface Category {
   updatedAt?: string;
 }
 
+export interface ProductVariant {
+  id: string;
+  weight: string;
+  size?: string;
+  unit?: string;
+  packageLabel?: string;
+  price: number;
+  originalPrice?: number;
+  stock?: number;
+  sku?: string;
+  isActive: boolean;
+}
+
 export interface Product {
   id: string;
   nameEn: string;
@@ -81,6 +95,7 @@ export interface Product {
   ratings: number;
   reviewCount: number;
   images: string[];
+  variants?: ProductVariant[];
   isFeatured?: boolean;
   isTrending?: boolean;
   isBestSeller?: boolean;
@@ -107,6 +122,8 @@ export interface CartItem {
   product: Product;
   quantity: number;
   selectedWeight?: string;
+  selectedVariant?: ProductVariant;
+  unitPrice?: number;
 }
 
 export interface Address {
@@ -130,6 +147,10 @@ export interface OrderItem {
   price: number;
   quantity: number;
   weight: string;
+  variantId?: string;
+  packageLabel?: string;
+  unitPrice?: number;
+  lineTotal?: number;
 }
 
 export type PaymentMethod = 'upi' | 'razorpay' | 'phonepe' | 'gpay' | 'cod' | 'stripe';
@@ -229,12 +250,39 @@ export interface User {
   wishlistCount?: number;
 }
 
+export interface RecipeSubcategory {
+  id: string;
+  categoryId?: string;
+  nameEn: string;
+  nameMr: string;
+  slug: string;
+}
+
+export interface RecipeCategory {
+  id: string;
+  nameEn: string;
+  nameMr: string;
+  slug: string;
+  descriptionEn?: string;
+  descriptionMr?: string;
+  imageUrl?: string;
+  subcategories: RecipeSubcategory[];
+  displayOrder: number;
+  isActive: boolean;
+}
+
 export interface Recipe {
   id: string;
   titleEn: string;
   titleMr: string;
   slug: string;
-  readTime: string;
+  descriptionEn?: string;
+  descriptionMr?: string;
+  categoryId: string;
+  categoryName: string;
+  subcategoryId?: string;
+  subcategoryName?: string;
+  readTime?: string;
   prepTime: string;
   cookTime: string;
   servings: string;
@@ -243,9 +291,18 @@ export interface Recipe {
   ingredientsMr: string[];
   stepsEn: string[];
   stepsMr: string[];
+  tipsEn?: string;
+  tipsMr?: string;
+  servingSuggestionsEn?: string;
+  servingSuggestionsMr?: string;
   image: string;
+  images: string[];
   relatedProductId?: string;
+  relatedProductName?: string;
   author: string;
+  isPublished: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ContactConfig {
