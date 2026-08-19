@@ -58,6 +58,7 @@ import {
   mapFrontendRecipeToDb,
   mapDbRecipeCategoryToFrontend
 } from '../utils/mappers';
+import { getCategoryProductCount } from '../utils/categoryUtils';
 
 interface Toast {
   id: string;
@@ -171,7 +172,7 @@ interface AppContextType {
 
   // Website Settings & Contact Information
   contactConfig: ContactConfig;
-  updateContactConfig: (config: Partial<ContactConfig>) => void;
+  updateContactConfig: (config: Partial<ContactConfig>) => Promise<boolean>;
 
   // Notification Toasts
   toasts: Toast[];
@@ -395,7 +396,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Fetch Categories
       const rawCategories = await supabaseGetCategories();
-      const mappedCategories = rawCategories.map(mapDbCategoryToFrontend);
+      const mappedCategories = rawCategories.map(mapDbCategoryToFrontend).map((cat) => ({
+        ...cat,
+        itemCount: getCategoryProductCount(cat, mappedProducts),
+      }));
       setCategories(mappedCategories);
 
       // 3. Fetch Orders
@@ -449,22 +453,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const mappedRecipeCategories = rawRecipeCategories.map(mapDbRecipeCategoryToFrontend);
       setRecipeCategories(mappedRecipeCategories);
 
-      // 8. Fetch Site Settings
+      // 8. Fetch Site Settings from Supabase
       const siteSettings = await supabaseGetSiteSettings();
-      if (siteSettings?.latest_videos_count !== undefined) {
-        setLatestVideosLimit(Number(siteSettings.latest_videos_count) || 2);
-      }
-      if (siteSettings?.phone) {
+      if (siteSettings) {
+        if (siteSettings.latest_videos_count !== undefined) {
+          setLatestVideosLimit(Number(siteSettings.latest_videos_count) || 2);
+        }
         setContactConfig({
-          phone: siteSettings.phone,
-          whatsapp: siteSettings.whatsapp || siteSettings.phone,
-          email: siteSettings.email || 'support@dadachadhaba.com',
-          address: siteSettings.address || '',
-          mapsUrl: siteSettings.maps_url || '',
+          phone: siteSettings.phone || siteSettings.contact_phone || '+91 91370 50018',
+          whatsapp: siteSettings.whatsapp || siteSettings.contact_whatsapp || siteSettings.phone || '+91 91370 50018',
+          email: siteSettings.email || siteSettings.contact_email || 'support@dadachadhaba.com',
+          address: siteSettings.address || siteSettings.contact_address_en || 'Dadacha Dhaba, Plot No. 42, Baner Road, Opp. Balewadi High Street, Pune - 411045',
+          mapsUrl: siteSettings.maps_url || 'https://maps.google.com/?q=Baner+Road+Pune',
           businessHours: siteSettings.business_hours || 'Mon - Sun: 9:00 AM - 10:00 PM',
-          instagramUrl: siteSettings.instagram_url || '',
-          youtubeUrl: siteSettings.youtube_url || '',
-          facebookUrl: siteSettings.facebook_url || '',
+          instagramUrl: siteSettings.instagram_url || 'https://www.instagram.com/dadanchadhaba?igsh=MTIzajBqdG1pdHJ5aA==',
+          youtubeUrl: siteSettings.youtube_url || 'https://youtube.com/@dadanchadhaba?si=3KnepBsTXtH6-Opz',
+          facebookUrl: siteSettings.facebook_url || 'https://www.facebook.com/share/199iUku8xx/',
           logo_url: siteSettings.logo_url || 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
         });
       }
@@ -615,24 +619,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logo_url: 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
   }));
 
-  const updateContactConfig = async (newConfig: Partial<ContactConfig>) => {
-    const updated = { ...contactConfig, ...newConfig };
-    setContactConfig(updated);
-    if (isSupabaseConfigured) {
-      await supabaseSaveSiteSettings({
-        phone: updated.phone,
-        whatsapp: updated.whatsapp,
-        email: updated.email,
-        address: updated.address,
-        maps_url: updated.mapsUrl,
-        business_hours: updated.businessHours,
-        instagram_url: updated.instagramUrl,
-        youtube_url: updated.youtubeUrl,
-        facebook_url: updated.facebookUrl,
-        logo_url: updated.logo_url,
-      });
+  const updateContactConfig = async (newConfig: Partial<ContactConfig>): Promise<boolean> => {
+    try {
+      const mergedConfig = { ...contactConfig, ...newConfig };
+      const dbPayload = {
+        phone: mergedConfig.phone,
+        whatsapp: mergedConfig.whatsapp,
+        email: mergedConfig.email,
+        address: mergedConfig.address,
+        maps_url: mergedConfig.mapsUrl,
+        business_hours: mergedConfig.businessHours,
+        instagram_url: mergedConfig.instagramUrl,
+        youtube_url: mergedConfig.youtubeUrl,
+        facebook_url: mergedConfig.facebookUrl,
+        logo_url: mergedConfig.logo_url,
+        // Compatibility columns
+        contact_phone: mergedConfig.phone,
+        contact_whatsapp: mergedConfig.whatsapp,
+        contact_email: mergedConfig.email,
+        contact_address_en: mergedConfig.address,
+      };
+
+      const { data, error } = await supabaseSaveSiteSettings(dbPayload);
+      if (error) {
+        showToast(language === 'mr' ? 'डेटा सेव्ह करताना त्रुटी आली!' : `Failed to save: ${error.message || 'Database error'}`, 'error');
+        return false;
+      }
+
+      // Immediately reload and use authoritative database values
+      const freshSettings = await supabaseGetSiteSettings();
+      const authoritative = freshSettings || data;
+      if (authoritative) {
+        setContactConfig({
+          phone: authoritative.phone || authoritative.contact_phone || mergedConfig.phone,
+          whatsapp: authoritative.whatsapp || authoritative.contact_whatsapp || authoritative.phone || mergedConfig.whatsapp,
+          email: authoritative.email || authoritative.contact_email || mergedConfig.email,
+          address: authoritative.address || authoritative.contact_address_en || mergedConfig.address,
+          mapsUrl: authoritative.maps_url || mergedConfig.mapsUrl,
+          businessHours: authoritative.business_hours || mergedConfig.businessHours,
+          instagramUrl: authoritative.instagram_url || mergedConfig.instagramUrl,
+          youtubeUrl: authoritative.youtube_url || mergedConfig.youtubeUrl,
+          facebookUrl: authoritative.facebook_url || mergedConfig.facebookUrl,
+          logo_url: authoritative.logo_url || mergedConfig.logo_url,
+        });
+      } else {
+        setContactConfig(mergedConfig);
+      }
+
+      showToast(language === 'mr' ? 'संपर्क माहिती डेटाबेसमध्ये यशस्वीरित्या सेव्ह झाली!' : 'Website & Contact Settings saved permanently to Supabase!');
+      return true;
+    } catch (err: any) {
+      showToast(`Error: ${err.message || 'Could not update settings'}`, 'error');
+      return false;
     }
-    showToast(language === 'mr' ? 'संपर्क माहिती अपडेट केली!' : 'Contact Information updated successfully!');
   };
 
   const navigateTo = (page: NavigationPage, params?: { productId?: string; orderId?: string; categoryId?: string; recipeId?: string; tab?: string }) => {
@@ -970,28 +1009,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addToCart = (product: Product, quantity = 1, selectedVariant?: ProductVariant) => {
     setCart((prevCart) => {
-      const variantKey = selectedVariant?.id || selectedVariant?.size || null;
+      const variantKey = selectedVariant?.id || selectedVariant?.weight || selectedVariant?.size || null;
       const existingIdx = prevCart.findIndex((item) => {
-        const itemVariantKey = item.selectedVariant?.id || item.selectedVariant?.size || null;
+        const itemVariantKey = item.selectedVariant?.id || item.selectedVariant?.weight || item.selectedVariant?.size || null;
         return item.product.id === product.id && itemVariantKey === variantKey;
       });
+
+      const effectivePrice = selectedVariant ? selectedVariant.price : product.price;
+      const effectiveWeight = selectedVariant ? (selectedVariant.weight || selectedVariant.size) : product.weight;
 
       if (existingIdx >= 0) {
         const copy = [...prevCart];
         copy[existingIdx] = {
           ...copy[existingIdx],
           quantity: copy[existingIdx].quantity + quantity,
+          unitPrice: effectivePrice,
+          selectedWeight: effectiveWeight,
+          selectedVariant: selectedVariant || copy[existingIdx].selectedVariant,
         };
         return copy;
       }
-      return [...prevCart, { product, quantity, selectedVariant }];
+      return [...prevCart, { 
+        product, 
+        quantity, 
+        selectedVariant, 
+        selectedWeight: effectiveWeight,
+        unitPrice: effectivePrice 
+      }];
     });
     
-    const sizeSuffix = selectedVariant ? ` (${selectedVariant.size})` : '';
+    const sizeLabel = selectedVariant ? ` (${selectedVariant.weight || selectedVariant.size})` : '';
     showToast(
       language === 'mr' 
-        ? `${product.nameMr}${sizeSuffix} कार्टमध्ये जोडले!` 
-        : `${product.nameEn}${sizeSuffix} added to cart!`
+        ? `${product.nameMr}${sizeLabel} कार्टमध्ये जोडले!` 
+        : `${product.nameEn}${sizeLabel} added to cart!`
     );
   };
 
@@ -999,7 +1050,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCart((prev) => prev.filter((item) => {
       if (item.product.id !== productId) return true;
       if (variantId) {
-        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.size;
+        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.weight || item.selectedVariant?.size;
         return itemVarId !== variantId;
       }
       return false;
@@ -1014,7 +1065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setCart((prev) =>
       prev.map((item) => {
-        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.size;
+        const itemVarId = item.selectedVariant?.id || item.selectedVariant?.weight || item.selectedVariant?.size;
         if (item.product.id === productId && (!variantId || itemVarId === variantId)) {
           return { ...item, quantity };
         }
@@ -1052,7 +1103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const subtotal = cart.reduce((acc, item) => {
-      const price = item.selectedVariant ? item.selectedVariant.price : item.product.price;
+      const price = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
       return acc + price * item.quantity;
     }, 0);
 
@@ -1077,7 +1128,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const createOrder = (paymentMethod: Order['paymentMethod'], shippingAddress: Address): Order => {
     const subtotal = cart.reduce((acc, item) => {
-      const price = item.selectedVariant ? item.selectedVariant.price : item.product.price;
+      const price = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
       return acc + price * item.quantity;
     }, 0);
 
@@ -1103,18 +1154,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userPhone: shippingAddress.phone || currentUser?.phone || '',
       shippingAddress,
       items: cart.map((item) => {
-        const itemPrice = item.selectedVariant ? item.selectedVariant.price : item.product.price;
-        const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : item.product.weight;
+        const itemPrice = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
+        const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250g');
+        const sizeLabel = item.selectedVariant ? ` (${item.selectedVariant.weight || item.selectedVariant.size})` : '';
         return {
           productId: item.product.id,
-          productNameEn: item.product.nameEn + (item.selectedVariant ? ` (${item.selectedVariant.size})` : ''),
-          productNameMr: item.product.nameMr + (item.selectedVariant ? ` (${item.selectedVariant.size})` : ''),
+          productNameEn: item.product.nameEn + sizeLabel,
+          productNameMr: item.product.nameMr + sizeLabel,
           image: (item.product.images && item.product.images.length > 0) ? item.product.images[0] : '',
           price: itemPrice,
           quantity: item.quantity,
           weight: itemWeight,
+          variantId: item.selectedVariant?.id,
           selectedVariantId: item.selectedVariant?.id,
-          selectedVariantSize: item.selectedVariant?.size,
+          selectedVariantSize: itemWeight,
+          unitPrice: itemPrice,
+          lineTotal: itemPrice * item.quantity,
         };
       }),
       subtotal,
@@ -1185,7 +1240,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Database error: ${error?.message || 'Failed to save product'}`, 'error');
     } else {
       const mapped = mapDbProductToFrontend(data);
-      setProducts((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+      const updatedProducts = [mapped, ...products.filter((p) => p.id !== mapped.id)];
+      setProducts(updatedProducts);
+      setCategories((prev) => prev.map((cat) => ({ ...cat, itemCount: getCategoryProductCount(cat, updatedProducts) })));
       showToast(language === 'mr' ? 'नवीन उत्पादन जोडले!' : 'Product added successfully!');
     }
   };
@@ -1201,18 +1258,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Database update error: ${error?.message || 'Failed to update product'}`, 'error');
     } else {
       const mapped = mapDbProductToFrontend(data);
-      setProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+      const updatedProducts = products.map((p) => (p.id === id ? mapped : p));
+      setProducts(updatedProducts);
+      setCategories((prev) => prev.map((cat) => ({ ...cat, itemCount: getCategoryProductCount(cat, updatedProducts) })));
       showToast(language === 'mr' ? 'उत्पादन अपडेट झाले!' : 'Product updated successfully!');
     }
   };
 
   const deleteProduct = async (id: string) => {
     const previousProducts = [...products];
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    const updatedProducts = products.filter((p) => p.id !== id);
+    setProducts(updatedProducts);
+    setCategories((prev) => prev.map((cat) => ({ ...cat, itemCount: getCategoryProductCount(cat, updatedProducts) })));
 
     const { success, error } = await supabaseDeleteProduct(id);
     if (!success || error) {
       setProducts(previousProducts);
+      setCategories((prev) => prev.map((cat) => ({ ...cat, itemCount: getCategoryProductCount(cat, previousProducts) })));
       showToast(`Database error: ${error?.message || 'Failed to delete product'}`, 'error');
     } else {
       showToast(language === 'mr' ? 'उत्पादन हटवले' : 'Product deleted', 'info');
@@ -1236,7 +1298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error || !data) {
       showToast(`Database error: ${error?.message || 'Failed to save category'}`, 'error');
     } else {
-      const mapped = mapDbCategoryToFrontend(data);
+      const mapped = { ...mapDbCategoryToFrontend(data), itemCount: getCategoryProductCount(data, products) };
       setCategories((prev) => [...prev.filter((c) => c.id !== mapped.id), mapped]);
       showToast(language === 'mr' ? 'नवीन श्रेणी यशस्वीपणे जोडली!' : 'Category created successfully!');
     }
@@ -1252,7 +1314,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error || !data) {
       showToast(`Database update error: ${error?.message || 'Failed to update category'}`, 'error');
     } else {
-      const mapped = mapDbCategoryToFrontend(data);
+      const mapped = { ...mapDbCategoryToFrontend(data), itemCount: getCategoryProductCount(data, products) };
       setCategories((prev) => prev.map((c) => (c.id === id ? mapped : c)));
       showToast(language === 'mr' ? 'श्रेणी अपडेट झाली!' : 'Category updated successfully!');
     }

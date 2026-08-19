@@ -18,13 +18,44 @@ export function mapDbProductToFrontend(row: any): Product {
     imagesArr = ['https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800'];
   }
 
+  let variantsArr: any[] = [];
+  if (Array.isArray(row.variants)) {
+    variantsArr = row.variants;
+  } else if (typeof row.variants === 'string') {
+    try {
+      variantsArr = JSON.parse(row.variants);
+    } catch {
+      variantsArr = [];
+    }
+  }
+
+  const basePrice = Number(row.price) || 0;
+  const baseWeight = row.weight || '250g';
+
+  const cleanedVariants = Array.isArray(variantsArr) && variantsArr.length > 0
+    ? variantsArr
+        .filter((v) => v && (v.weight || v.size) && Number(v.price) > 0)
+        .map((v, idx) => ({
+          id: String(v.id || `v-${row.id || 'p'}-${idx + 1}`),
+          weight: String(v.weight || v.size || '').trim(),
+          size: String(v.size || v.weight || '').trim(),
+          unit: v.unit || '',
+          packageLabel: v.packageLabel || '',
+          price: Number(v.price) || basePrice,
+          originalPrice: v.originalPrice ? Number(v.originalPrice) : Math.round((Number(v.price) || basePrice) * 1.25),
+          stock: v.stock !== undefined ? Number(v.stock) : Number(row.stock_quantity ?? row.stock ?? 100),
+          sku: v.sku || `${row.sku || 'DD'}-${String(v.weight || v.size || idx).replace(/[^a-zA-Z0-9]/g, '')}`,
+          isActive: v.isActive !== false,
+        }))
+    : undefined;
+
   return {
     id: String(row.id),
     nameEn: row.name_en || row.nameEn || row.title_en || 'Product',
     nameMr: row.name_mr || row.nameMr || row.title_mr || row.name_en || 'उत्पादन',
     slug: row.slug || (row.name_en ? row.name_en.toLowerCase().replace(/[^a-z0-9]+/g, '-') : String(row.id)),
-    price: Number(row.price) || 0,
-    originalPrice: Number(row.original_price || row.originalPrice) || Math.round((Number(row.price) || 0) * 1.25),
+    price: basePrice,
+    originalPrice: Number(row.original_price || row.originalPrice) || Math.round(basePrice * 1.25),
     discountPercent: Number(row.discount_percent || row.discountPercent) || 0,
     stock: Number(row.stock_quantity ?? row.stock) ?? 0,
     sku: row.sku || `DD-${row.id}`,
@@ -32,13 +63,14 @@ export function mapDbProductToFrontend(row: any): Product {
     descriptionMr: row.description_mr || row.descriptionMr || '',
     ingredientsEn: row.ingredients_en || row.ingredientsEn || '',
     ingredientsMr: row.ingredients_mr || row.ingredientsMr || '',
-    weight: row.weight || '250g',
+    weight: baseWeight,
     brand: row.brand || 'Dadacha Dhaba',
     categoryId: row.category_id || row.category || 'spices',
     categoryName: row.category_name || row.category || 'Spices',
     ratings: Number(row.rating || row.ratings) || 5.0,
     reviewCount: Number(row.review_count || row.reviewCount) || 0,
     images: imagesArr,
+    variants: cleanedVariants,
     isFeatured: Boolean(row.is_featured || row.isFeatured),
     isTrending: Boolean(row.is_trending || row.isTrending),
     isBestSeller: Boolean(row.is_bestseller || row.isBestSeller),
@@ -74,9 +106,12 @@ export function mapFrontendProductToDb(p: Product): any {
     rating: p.ratings,
     review_count: p.reviewCount,
     images: p.images,
+    variants: p.variants && p.variants.length > 0 ? p.variants : [],
     is_featured: p.isFeatured,
     is_trending: p.isTrending,
     is_bestseller: p.isBestSeller,
+    is_special_masala: p.isSpecialMasala,
+    is_kitchen_appliance: p.isKitchenAppliance,
     updated_at: new Date().toISOString(),
   };
 }
@@ -176,9 +211,13 @@ export function mapDbOrderToFrontend(row: any): Order {
       productNameEn: it.productNameEn || it.product_name_en || 'Product',
       productNameMr: it.productNameMr || it.product_name_mr || 'उत्पादन',
       image: it.image || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800',
-      price: Number(it.price) || 0,
+      price: Number(it.price || it.unitPrice || 0),
       quantity: Number(it.quantity) || 1,
-      weight: it.weight || '250g',
+      weight: it.weight || it.selectedWeight || it.selectedVariantSize || '250g',
+      variantId: it.variantId || it.variant_id || it.selectedVariantId || undefined,
+      packageLabel: it.packageLabel || undefined,
+      unitPrice: Number(it.unitPrice || it.price || 0),
+      lineTotal: Number(it.lineTotal || (Number(it.price || 0) * Number(it.quantity || 1))),
     })),
     subtotal: Number(row.subtotal) || 0,
     discountAmount: Number(row.discount_amount) || 0,

@@ -10,8 +10,8 @@ export const Footer: React.FC = () => {
   const { language, navigateTo, showToast, contactConfig } = useApp();
   const [newsletterEmail, setNewsletterEmail] = useState('');
 
-  const cleanPhone = contactConfig.phone.replace(/[^0-9+]/g, '');
-  const cleanWa = contactConfig.whatsapp.replace(/[^0-9]/g, '');
+  const cleanPhone = (contactConfig?.phone || '').replace(/[^0-9+]/g, '');
+  const cleanWa = (contactConfig?.whatsapp || '').replace(/[^0-9]/g, '');
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();

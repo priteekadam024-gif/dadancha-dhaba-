@@ -16,6 +16,39 @@ export const ProductDetailPage: React.FC = () => {
 
   const product = products.find((p) => p.id === selectedProductId) || products[0];
 
+  // Available variants (fallback to default product weight & price if no variants)
+  const variants = (product.variants && product.variants.length > 0)
+    ? product.variants
+    : [{ id: 'default', weight: product.weight || '250 g', size: product.weight || '250 g', price: product.price, originalPrice: product.originalPrice, stock: product.stock, isActive: true }];
+
+  const [selectedVariant, setSelectedVariant] = useState(variants[0]);
+
+  // Reset selected variant when product changes
+  React.useEffect(() => {
+    if (product.variants && product.variants.length > 0) {
+      setSelectedVariant(product.variants[0]);
+    } else {
+      setSelectedVariant({
+        id: 'default',
+        weight: product.weight || '250 g',
+        size: product.weight || '250 g',
+        price: product.price,
+        originalPrice: product.originalPrice,
+        stock: product.stock,
+        isActive: true
+      });
+    }
+  }, [product.id, product.variants, product.weight, product.price, product.originalPrice, product.stock]);
+
+  const activePrice = selectedVariant ? Number(selectedVariant.price) : product.price;
+  const activeOriginalPrice = selectedVariant?.originalPrice 
+    ? Number(selectedVariant.originalPrice) 
+    : (product.originalPrice || Math.round(activePrice * 1.25));
+  const activeWeight = selectedVariant ? (selectedVariant.weight || selectedVariant.size) : product.weight;
+  const activeDiscountPercent = activeOriginalPrice > activePrice 
+    ? Math.round(((activeOriginalPrice - activePrice) / activeOriginalPrice) * 100)
+    : 0;
+
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -223,25 +256,78 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Price Box */}
-          <div className="p-4 bg-[#161616] border border-zinc-800 rounded-2xl flex items-baseline gap-3">
-            <span className="text-3xl font-black text-[#F4B400]">₹{product.price}</span>
-            {product.originalPrice > product.price && (
-              <span className="text-base text-zinc-500 line-through">₹{product.originalPrice}</span>
+          {/* Dynamic Price Box */}
+          <div className="p-4 sm:p-5 bg-[#161616] border border-zinc-800 rounded-2xl flex flex-wrap items-baseline gap-3 shadow-inner">
+            <span className="text-3xl sm:text-4xl font-black text-[#F4B400]">₹{activePrice}</span>
+            {activeOriginalPrice > activePrice && (
+              <span className="text-base sm:text-lg text-zinc-500 line-through">₹{activeOriginalPrice}</span>
+            )}
+            {activeDiscountPercent > 0 && (
+              <span className="text-xs bg-[#F4B400]/20 text-[#F4B400] font-black px-2.5 py-1 rounded-full border border-[#F4B400]/30">
+                {activeDiscountPercent}% OFF
+              </span>
             )}
             <span className="text-xs text-emerald-400 font-bold ml-auto bg-emerald-950/60 border border-emerald-800 px-2.5 py-1 rounded-full">
-              {language === 'mr' ? 'कर समाविष्ट' : 'Inclusive of all Taxes'}
+              {language === 'mr' ? 'कर समाविष्ट (All Taxes Incl.)' : 'Inclusive of all Taxes'}
             </span>
           </div>
 
-          {/* Weight Badge */}
-          <div>
-            <label className="text-xs font-bold text-zinc-400 block mb-2 uppercase">
-              {language === 'mr' ? 'वजन / आकार:' : 'Pack Size / Weight:'}
-            </label>
-            <span className="inline-block bg-[#F4B400] text-[#111111] font-bold text-sm px-4 py-1.5 rounded-xl shadow">
-              {product.weight}
-            </span>
+          {/* Pack Sizes / Weight Options Selector */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-extrabold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>{language === 'mr' ? 'उपलब्ध वजन / पॅक निवडा:' : 'Select Pack Size / Weight:'}</span>
+              </label>
+              {selectedVariant && (
+                <span className="text-xs text-[#F4B400] font-bold">
+                  {language === 'mr' ? 'निवडलेले:' : 'Selected:'} {activeWeight} (₹{activePrice})
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {variants.map((v, idx) => {
+                const isSelected = selectedVariant?.id === v.id || (!selectedVariant && idx === 0);
+                const variantWeight = v.weight || v.size || '250 g';
+                const variantPrice = Number(v.price) || product.price;
+                const variantOriginalPrice = v.originalPrice || Math.round(variantPrice * 1.25);
+
+                return (
+                  <button
+                    key={v.id || idx}
+                    type="button"
+                    onClick={() => setSelectedVariant(v)}
+                    className={`relative p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-[#1F1700] border-[#F4B400] ring-1 ring-[#F4B400] text-white shadow-lg'
+                        : 'bg-[#141414] border-zinc-800 hover:border-zinc-700 text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="font-extrabold text-sm text-white">
+                        {variantWeight}
+                      </span>
+                      {isSelected ? (
+                        <CheckCircle2 className="w-4 h-4 text-[#F4B400] shrink-0" />
+                      ) : (
+                        <span className="w-3.5 h-3.5 rounded-full border border-zinc-700 shrink-0" />
+                      )}
+                    </div>
+
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className={`text-sm font-black ${isSelected ? 'text-[#F4B400]' : 'text-white'}`}>
+                        ₹{variantPrice}
+                      </span>
+                      {variantOriginalPrice > variantPrice && (
+                        <span className="text-[10px] text-zinc-500 line-through">
+                          ₹{variantOriginalPrice}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Quantity Selector & Action Buttons */}
@@ -281,16 +367,18 @@ export const ProductDetailPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <button
-                onClick={() => addToCart(product, quantity)}
-                className="w-full bg-[#1F1F1F] hover:bg-[#262626] text-white font-bold text-sm py-3.5 rounded-2xl border border-[#F4B400] transition-all flex items-center justify-center gap-2"
+                onClick={() => addToCart(product, quantity, selectedVariant)}
+                className="w-full bg-[#1F1F1F] hover:bg-[#262626] text-white font-bold text-sm py-3.5 rounded-2xl border border-[#F4B400] transition-all flex items-center justify-center gap-2 shadow-md hover:scale-[1.01]"
               >
                 <ShoppingBag className="w-5 h-5 text-[#F4B400]" />
-                <span>{language === 'mr' ? 'कार्टमध्ये जोडा' : 'Add to Cart'}</span>
+                <span>
+                  {language === 'mr' ? 'कार्टमध्ये जोडा' : 'Add to Cart'} ({activeWeight})
+                </span>
               </button>
 
               <button
                 onClick={() => {
-                  addToCart(product, quantity);
+                  addToCart(product, quantity, selectedVariant);
                   navigateTo('checkout');
                 }}
                 className="w-full bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-sm py-3.5 rounded-2xl transition-all shadow-xl hover:scale-[1.02] flex items-center justify-center gap-2"
@@ -303,7 +391,7 @@ export const ProductDetailPage: React.FC = () => {
             {/* Ask about this Product Button */}
             <a
               href={`https://wa.me/${contactConfig.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                `Hello Dadacha Dhaba,\n\nI would like to know more about this product:\n\nProduct Name: ${product.nameEn}\nProduct Price: ₹${product.price}`
+                `Hello Dadacha Dhaba,\n\nI would like to know more about this product:\n\nProduct Name: ${product.nameEn}\nPack Size: ${activeWeight}\nPrice: ₹${activePrice}`
               )}`}
               target="_blank"
               rel="noreferrer"

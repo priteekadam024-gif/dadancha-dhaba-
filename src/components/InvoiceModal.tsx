@@ -52,7 +52,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
             <div>
               <DhabaLogo size="lg" purpose="invoice" />
               <p className="text-xs text-zinc-600 mt-2">
-                Baner Road, Opposite Balewadi High Street, Pune - 411045<br />
+                {contactConfig.address || 'Baner Road, Opposite Balewadi High Street, Pune - 411045'}<br />
                 GSTIN: 27AABCD1234E1Z5 | FSSAI Lic: 11523009000123<br />
                 Phone: {contactConfig.phone} | {contactConfig.email}
               </p>

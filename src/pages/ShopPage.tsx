@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ProductCard } from '../components/ProductCard';
 import { Search, Filter, SlidersHorizontal, Grid, List } from 'lucide-react';
+import { isProductInCategory, getCategoryProductCount } from '../utils/categoryUtils';
 
 export const ShopPage: React.FC = () => {
   const { 
@@ -15,7 +16,7 @@ export const ShopPage: React.FC = () => {
 
   // Filter products
   let filteredProducts = products.filter((p) => {
-    const matchesCategory = activeCategory === 'all' || p.categoryId === activeCategory;
+    const matchesCategory = activeCategory === 'all' || isProductInCategory(p, activeCategory);
     const matchesSearch = 
       p.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) || 
       p.nameMr.includes(searchQuery) || 

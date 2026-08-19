@@ -84,15 +84,25 @@ export const CheckoutPage: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            items: cart.map((item) => ({
-              productId: item.product.id,
-              quantity: item.quantity,
-              price: item.product.price,
-              productNameEn: item.product.nameEn,
-              productNameMr: item.product.nameMr,
-              image: item.product.images[0],
-              weight: item.product.weight,
-            })),
+            items: cart.map((item) => {
+              const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+              const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
+              const sizeLabel = item.selectedVariant ? ` (${item.selectedVariant.weight || item.selectedVariant.size})` : (item.selectedWeight ? ` (${item.selectedWeight})` : '');
+              return {
+                productId: item.product.id,
+                quantity: item.quantity,
+                price: itemPrice,
+                productNameEn: item.product.nameEn + sizeLabel,
+                productNameMr: item.product.nameMr + sizeLabel,
+                image: item.product.images[0],
+                weight: itemWeight,
+                variantId: item.selectedVariant?.id,
+                selectedVariantId: item.selectedVariant?.id,
+                selectedVariantSize: itemWeight,
+                unitPrice: itemPrice,
+                lineTotal: itemPrice * item.quantity,
+              };
+            }),
             couponCode: appliedCoupon?.code,
             shippingAddress: selectedAddress,
             userId: currentUser?.id,
@@ -425,18 +435,24 @@ export const CheckoutPage: React.FC = () => {
             </h3>
 
             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-              {cart.map((item) => (
-                <div key={item.product.id} className="flex items-center gap-3 text-xs">
-                  <img src={item.product.images[0]} alt="p" className="w-10 h-10 object-cover rounded-lg border border-zinc-800" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white truncate font-marathi">
-                      {language === 'mr' ? item.product.nameMr : item.product.nameEn}
-                    </p>
-                    <p className="text-zinc-500">Qty: {item.quantity}</p>
+              {cart.map((item, idx) => {
+                const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+                const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
+                const key = item.selectedVariant ? `${item.product.id}_${item.selectedVariant.id}` : (item.selectedWeight ? `${item.product.id}_${item.selectedWeight}` : `${item.product.id}_${idx}`);
+
+                return (
+                  <div key={key} className="flex items-center gap-3 text-xs">
+                    <img src={item.product.images[0]} alt="p" className="w-10 h-10 object-cover rounded-lg border border-zinc-800" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-white truncate font-marathi">
+                        {language === 'mr' ? item.product.nameMr : item.product.nameEn}
+                      </p>
+                      <p className="text-zinc-500 text-[11px]">{itemWeight} • Qty: {item.quantity}</p>
+                    </div>
+                    <span className="font-bold text-[#F4B400]">₹{itemPrice * item.quantity}</span>
                   </div>
-                  <span className="font-bold text-[#F4B400]">₹{item.product.price * item.quantity}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="border-t border-zinc-800 pt-3 space-y-2 text-xs text-zinc-300">

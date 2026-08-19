@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, VideoItem } from '../types';
 import { InvoiceModal } from '../components/InvoiceModal';
@@ -38,19 +38,36 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ defaultT
   }, [defaultTab, setContextTab]);
 
   // Contact Settings Form State
-  const [settingsPhone, setSettingsPhone] = useState(contactConfig.phone);
-  const [settingsWhatsapp, setSettingsWhatsapp] = useState(contactConfig.whatsapp);
-  const [settingsEmail, setSettingsEmail] = useState(contactConfig.email);
-  const [settingsAddress, setSettingsAddress] = useState(contactConfig.address);
-  const [settingsMapsUrl, setSettingsMapsUrl] = useState(contactConfig.mapsUrl);
-  const [settingsBusinessHours, setSettingsBusinessHours] = useState(contactConfig.businessHours);
-  const [settingsInstagram, setSettingsInstagram] = useState(contactConfig.instagramUrl || 'https://www.instagram.com/dadanchadhaba?igsh=MTIzajBqdG1pdHJ5aA==');
-  const [settingsYoutube, setSettingsYoutube] = useState(contactConfig.youtubeUrl || 'https://youtube.com/@dadanchadhaba?si=3KnepBsTXtH6-Opz');
-  const [settingsFacebook, setSettingsFacebook] = useState(contactConfig.facebookUrl || 'https://www.facebook.com/share/199iUku8xx/');
-  const [settingsLogoUrl, setSettingsLogoUrl] = useState(contactConfig.logo_url || 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png');
+  const [settingsPhone, setSettingsPhone] = useState(contactConfig.phone || '');
+  const [settingsWhatsapp, setSettingsWhatsapp] = useState(contactConfig.whatsapp || '');
+  const [settingsEmail, setSettingsEmail] = useState(contactConfig.email || '');
+  const [settingsAddress, setSettingsAddress] = useState(contactConfig.address || '');
+  const [settingsMapsUrl, setSettingsMapsUrl] = useState(contactConfig.mapsUrl || '');
+  const [settingsBusinessHours, setSettingsBusinessHours] = useState(contactConfig.businessHours || '');
+  const [settingsInstagram, setSettingsInstagram] = useState(contactConfig.instagramUrl || '');
+  const [settingsYoutube, setSettingsYoutube] = useState(contactConfig.youtubeUrl || '');
+  const [settingsFacebook, setSettingsFacebook] = useState(contactConfig.facebookUrl || '');
+  const [settingsLogoUrl, setSettingsLogoUrl] = useState(contactConfig.logo_url || '');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Synchronize local form inputs when contactConfig finishes loading from Supabase
+  useEffect(() => {
+    if (contactConfig) {
+      setSettingsPhone(contactConfig.phone || '');
+      setSettingsWhatsapp(contactConfig.whatsapp || '');
+      setSettingsEmail(contactConfig.email || '');
+      setSettingsAddress(contactConfig.address || '');
+      setSettingsMapsUrl(contactConfig.mapsUrl || '');
+      setSettingsBusinessHours(contactConfig.businessHours || '');
+      setSettingsInstagram(contactConfig.instagramUrl || '');
+      setSettingsYoutube(contactConfig.youtubeUrl || '');
+      setSettingsFacebook(contactConfig.facebookUrl || '');
+      setSettingsLogoUrl(contactConfig.logo_url || '');
+    }
+  }, [contactConfig]);
 
   const handleLogoFileSelect = (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -85,20 +102,25 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ defaultT
     setIsDraggingLogo(false);
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateContactConfig({
-      phone: settingsPhone,
-      whatsapp: settingsWhatsapp,
-      email: settingsEmail,
-      address: settingsAddress,
-      mapsUrl: settingsMapsUrl,
-      businessHours: settingsBusinessHours,
-      instagramUrl: settingsInstagram,
-      youtubeUrl: settingsYoutube,
-      facebookUrl: settingsFacebook,
-      logo_url: settingsLogoUrl,
-    });
+    setIsSavingSettings(true);
+    try {
+      await updateContactConfig({
+        phone: settingsPhone,
+        whatsapp: settingsWhatsapp,
+        email: settingsEmail,
+        address: settingsAddress,
+        mapsUrl: settingsMapsUrl,
+        businessHours: settingsBusinessHours,
+        instagramUrl: settingsInstagram,
+        youtubeUrl: settingsYoutube,
+        facebookUrl: settingsFacebook,
+        logo_url: settingsLogoUrl,
+      });
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   const validAdminTabs = ['analytics', 'products', 'categories', 'recipes', 'orders', 'videos', 'gallery', 'users', 'branding', 'media', 'settings', 'revenue'];
@@ -920,10 +942,20 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 
               <button
                 type="submit"
-                className="bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-sm px-8 py-3.5 rounded-2xl hover:scale-105 transition-all shadow-xl flex items-center gap-2"
+                disabled={isSavingSettings}
+                className="bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-sm px-8 py-3.5 rounded-2xl hover:scale-105 transition-all shadow-xl flex items-center gap-2 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
               >
-                <CheckCircle className="w-5 h-5" />
-                <span>Save & Publish Contact Settings</span>
+                {isSavingSettings ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Saving to Supabase...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Save & Publish Contact Settings</span>
+                  </>
+                )}
               </button>
             </form>
           </div>

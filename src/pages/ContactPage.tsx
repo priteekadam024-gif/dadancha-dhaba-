@@ -64,20 +64,23 @@ export const ContactPage: React.FC = () => {
             <div className="space-y-3 text-xs text-zinc-300">
               <p>
                 <strong className="text-white block">
-                  {language === 'mr' ? 'पुणे ढाबा (Pune Branch):' : 'Pune Flagship Branch:'}
+                  {language === 'mr' ? 'अधिकृत पत्ता (Official Address):' : 'Official Registered Address:'}
                 </strong>
-                {language === 'mr'
-                  ? 'दादाचा ढाबा, प्लॉट नं ४२, बाणेर रोड, बालेवाडी हायस्ट्रीट समोर, पुणे - ४११०४५'
-                  : 'Dadacha Dhaba, Plot No. 42, Baner Road, Opp. Balewadi High Street, Pune - 411045'}
+                <span>{contactConfig.address || 'Dadacha Dhaba, Baner Road, Pune - 411045'}</span>
               </p>
-              <p>
-                <strong className="text-white block">
-                  {language === 'mr' ? 'कोल्हापूर केंद्र (Kolhapur Branch):' : 'Kolhapur Distribution Hub:'}
-                </strong>
-                {language === 'mr'
-                  ? 'ताराबाई पार्क, स्टेशन रोड, कोल्हापूर - ४१६००३'
-                  : 'Tarabai Park, Station Road, Kolhapur - 416003'}
-              </p>
+              {contactConfig.mapsUrl && (
+                <p className="pt-1">
+                  <a
+                    href={contactConfig.mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[#F4B400] hover:underline font-bold text-xs"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>{language === 'mr' ? 'गुगल मॅपवर दिशा पहा' : 'View on Google Maps'}</span>
+                  </a>
+                </p>
+              )}
             </div>
           </div>
 

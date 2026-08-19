@@ -71,7 +71,7 @@ export interface ProductVariant {
   originalPrice?: number;
   stock?: number;
   sku?: string;
-  isActive: boolean;
+  isActive?: boolean;
 }
 
 export interface Product {
@@ -148,6 +148,8 @@ export interface OrderItem {
   quantity: number;
   weight: string;
   variantId?: string;
+  selectedVariantId?: string;
+  selectedVariantSize?: string;
   packageLabel?: string;
   unitPrice?: number;
   lineTotal?: number;

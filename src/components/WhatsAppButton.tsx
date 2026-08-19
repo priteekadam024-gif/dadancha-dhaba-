@@ -5,8 +5,8 @@ import { MessageCircle, Phone } from 'lucide-react';
 export const WhatsAppButton: React.FC = () => {
   const { contactConfig } = useApp();
 
-  const cleanWaNumber = contactConfig.whatsapp.replace(/[^0-9]/g, '');
-  const cleanPhone = contactConfig.phone.replace(/[^0-9+]/g, '');
+  const cleanWaNumber = (contactConfig?.whatsapp || '').replace(/[^0-9]/g, '');
+  const cleanPhone = (contactConfig?.phone || '').replace(/[^0-9+]/g, '');
 
   const handleWhatsAppClick = () => {
     const message = encodeURIComponent('Hello Dadacha Dhaba,\n\nI would like to know more about your products.');

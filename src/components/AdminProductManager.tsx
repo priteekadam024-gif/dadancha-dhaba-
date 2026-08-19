@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product } from '../types';
+import { Product, ProductVariant } from '../types';
 import { findMatchingImages } from '../utils/imageSearch';
 import { 
   Plus, Edit, Trash2, Eye, Search, Filter, ArrowUpDown, 
   Upload, X, Check, Sparkles, Image as ImageIcon, Download, 
   CheckSquare, Square, AlertCircle, Tag, Package, Layers, 
-  RotateCcw, ChevronLeft, ChevronRight, Star, Flame, Grid, List
+  RotateCcw, ChevronLeft, ChevronRight, Star, Flame, Grid, List,
+  ArrowUp, ArrowDown, Scale
 } from 'lucide-react';
 
 export const AdminProductManager: React.FC = () => {
@@ -46,7 +47,7 @@ export const AdminProductManager: React.FC = () => {
   const [formOriginalPrice, setFormOriginalPrice] = useState(300);
   const [formStock, setFormStock] = useState(50);
   const [formSku, setFormSku] = useState('');
-  const [formWeight, setFormWeight] = useState('250g');
+  const [formWeight, setFormWeight] = useState('250 g');
   const [formBrand, setFormBrand] = useState('Dadacha Dhaba');
   const [formDescEn, setFormDescEn] = useState('');
   const [formDescMr, setFormDescMr] = useState('');
@@ -58,7 +59,62 @@ export const AdminProductManager: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Pack Sizes / Weight Options State
+  const [formVariants, setFormVariants] = useState<ProductVariant[]>([
+    { id: 'v-1', weight: '250 g', price: 149, originalPrice: 180, stock: 50, isActive: true },
+    { id: 'v-2', weight: '500 g', price: 279, originalPrice: 320, stock: 50, isActive: true },
+    { id: 'v-3', weight: '1 kg', price: 499, originalPrice: 580, stock: 50, isActive: true }
+  ]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pack size / Variant Handlers
+  const handleAddVariant = (weightPreset?: string, pricePreset?: number) => {
+    const newWeight = weightPreset || '250 g';
+    const newPrice = pricePreset || 199;
+    const newVariant: ProductVariant = {
+      id: `v-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      weight: newWeight,
+      size: newWeight,
+      price: newPrice,
+      originalPrice: Math.round(newPrice * 1.25),
+      stock: 50,
+      sku: `DD-${newWeight.replace(/\s+/g, '').toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
+      isActive: true,
+    };
+    setFormVariants((prev) => [...prev, newVariant]);
+  };
+
+  const handleUpdateVariant = (index: number, field: keyof ProductVariant, value: any) => {
+    setFormVariants((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      if (field === 'weight') {
+        copy[index].size = value;
+      }
+      return copy;
+    });
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    if (formVariants.length <= 1) {
+      showToast('At least one pack size option is required', 'error');
+      return;
+    }
+    setFormVariants((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleMoveVariant = (index: number, direction: 'up' | 'down') => {
+    setFormVariants((prev) => {
+      const copy = [...prev];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= copy.length) return prev;
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
 
   // Filter Products
   const filteredProducts = products.filter((p) => {
@@ -119,11 +175,11 @@ export const AdminProductManager: React.FC = () => {
     setFormNameEn('');
     setFormNameMr('');
     setFormCategory(categories[0]?.id || 'spices');
-    setFormPrice(220);
-    setFormOriginalPrice(280);
+    setFormPrice(149);
+    setFormOriginalPrice(180);
     setFormStock(50);
     setFormSku(`DD-SKU-${Math.floor(1000 + Math.random() * 9000)}`);
-    setFormWeight('250g');
+    setFormWeight('250 g');
     setFormBrand('Dadacha Dhaba');
     setFormDescEn('Authentic traditional recipe handcrafted in Kolhapur.');
     setFormDescMr('कोल्हापुरी परंपरेनुसार बनवलेला अस्सल गावरान मसाला.');
@@ -133,6 +189,12 @@ export const AdminProductManager: React.FC = () => {
     setFormIsTrending(false);
     setFormImages([
       'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=800'
+    ]);
+    // Default 3 common pack sizes with independent prices
+    setFormVariants([
+      { id: `v-${Date.now()}-1`, weight: '250 g', size: '250 g', price: 149, originalPrice: 180, stock: 50, isActive: true },
+      { id: `v-${Date.now()}-2`, weight: '500 g', size: '500 g', price: 279, originalPrice: 320, stock: 50, isActive: true },
+      { id: `v-${Date.now()}-3`, weight: '1 kg', size: '1 kg', price: 499, originalPrice: 580, stock: 50, isActive: true }
     ]);
     setShowFormModal(true);
   };
@@ -156,6 +218,32 @@ export const AdminProductManager: React.FC = () => {
     setFormIsFeatured(!!product.isFeatured);
     setFormIsTrending(!!product.isTrending);
     setFormImages(product.images.length > 0 ? [...product.images] : ['https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=800']);
+    
+    // Load existing variants or initialize from product weight and price
+    if (product.variants && product.variants.length > 0) {
+      setFormVariants(product.variants.map((v, i) => ({
+        ...v,
+        id: v.id || `v-${Date.now()}-${i}`,
+        weight: v.weight || v.size || '250 g',
+        size: v.size || v.weight || '250 g',
+        price: Number(v.price) || product.price,
+        originalPrice: v.originalPrice || Math.round((Number(v.price) || product.price) * 1.25),
+        stock: v.stock !== undefined ? Number(v.stock) : product.stock,
+        isActive: v.isActive !== undefined ? v.isActive : true
+      })));
+    } else {
+      setFormVariants([
+        { 
+          id: `v-${Date.now()}-1`, 
+          weight: product.weight || '250 g', 
+          size: product.weight || '250 g',
+          price: product.price || 149, 
+          originalPrice: product.originalPrice || Math.round((product.price || 149) * 1.25), 
+          stock: product.stock || 50, 
+          isActive: true 
+        }
+      ]);
+    }
     setShowFormModal(true);
   };
 
@@ -171,10 +259,43 @@ export const AdminProductManager: React.FC = () => {
       return;
     }
 
+    // Validate Variants
+    if (!formVariants || formVariants.length === 0) {
+      showToast('At least one Pack Size / Weight option is required', 'error');
+      return;
+    }
+
+    const seenWeights = new Set<string>();
+    for (let i = 0; i < formVariants.length; i++) {
+      const v = formVariants[i];
+      const normalizedWeight = (v.weight || v.size || '').trim();
+      if (!normalizedWeight) {
+        showToast(`Pack size #${i + 1} has an empty weight. Please enter a valid weight (e.g. 250 g, 500 g).`, 'error');
+        return;
+      }
+      if (!v.price || Number(v.price) <= 0) {
+        showToast(`Please enter a valid price (> 0) for pack size "${normalizedWeight}".`, 'error');
+        return;
+      }
+      const lowerWeight = normalizedWeight.toLowerCase().replace(/\s+/g, '');
+      if (seenWeights.has(lowerWeight)) {
+        showToast(`Duplicate pack size "${normalizedWeight}" found. Each option must have a unique weight.`, 'error');
+        return;
+      }
+      seenWeights.add(lowerWeight);
+    }
+
     const categoryObj = categories.find((c) => c.id === formCategory);
     const categoryName = categoryObj ? categoryObj.nameEn : formCategory.toUpperCase();
-    const discountPercent = formOriginalPrice > formPrice 
-      ? Math.round(((formOriginalPrice - formPrice) / formOriginalPrice) * 100) 
+
+    // Primary variant will dictate default price & weight
+    const primaryVariant = formVariants[0];
+    const effectivePrice = Number(primaryVariant.price) || Number(formPrice);
+    const effectiveOriginalPrice = primaryVariant.originalPrice ? Number(primaryVariant.originalPrice) : Number(formOriginalPrice);
+    const effectiveWeight = primaryVariant.weight || formWeight || '250 g';
+
+    const discountPercent = effectiveOriginalPrice > effectivePrice 
+      ? Math.round(((effectiveOriginalPrice - effectivePrice) / effectiveOriginalPrice) * 100) 
       : 0;
 
     const productPayload: Omit<Product, 'id' | 'createdAt'> = {
@@ -183,12 +304,12 @@ export const AdminProductManager: React.FC = () => {
       slug: formNameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       categoryId: formCategory,
       categoryName,
-      price: Number(formPrice),
-      originalPrice: Number(formOriginalPrice),
+      price: effectivePrice,
+      originalPrice: effectiveOriginalPrice,
       discountPercent,
       stock: Number(formStock),
       sku: formSku || `DD-SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      weight: formWeight,
+      weight: effectiveWeight,
       brand: formBrand,
       descriptionEn: formDescEn,
       descriptionMr: formDescMr || formDescEn,
@@ -200,6 +321,16 @@ export const AdminProductManager: React.FC = () => {
       isFeatured: formIsFeatured,
       isTrending: formIsTrending,
       isBestSeller: editingProduct ? editingProduct.isBestSeller : false,
+      variants: formVariants.map((v) => ({
+        id: v.id || `v-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        weight: (v.weight || v.size || '').trim(),
+        size: (v.size || v.weight || '').trim(),
+        price: Number(v.price),
+        originalPrice: v.originalPrice ? Number(v.originalPrice) : undefined,
+        stock: v.stock !== undefined ? Number(v.stock) : undefined,
+        sku: v.sku || undefined,
+        isActive: v.isActive !== undefined ? v.isActive : true
+      }))
     };
 
     if (editingProduct) {
@@ -552,7 +683,17 @@ export const AdminProductManager: React.FC = () => {
                             <div>
                               <span className="font-bold text-white block text-sm font-marathi">{p.nameMr}</span>
                               <span className="text-zinc-400 text-xs block">{p.nameEn}</span>
-                              <span className="text-zinc-500 text-[10px]">{p.weight}</span>
+                              {p.variants && p.variants.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {p.variants.map((v, vIdx) => (
+                                    <span key={vIdx} className="bg-[#222222] text-[#F4B400] text-[9px] font-bold px-1.5 py-0.5 rounded border border-zinc-700">
+                                      {v.weight || v.size}: ₹{v.price}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-zinc-500 text-[10px]">{p.weight}</span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -751,7 +892,176 @@ export const AdminProductManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Category, SKU, Weight & Brand */}
+              {/* PACK SIZES / WEIGHT OPTIONS SECTION (वजन पर्याय व स्वतंत्र किमती) */}
+              <div className="bg-[#181818] border-2 border-[#F4B400]/40 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-[#F4B400]" />
+                      <h4 className="font-extrabold text-sm sm:text-base text-white">
+                        Pack Sizes & Weight Options (वजन पर्याय व स्वतंत्र किमती)
+                      </h4>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Configure multiple pack sizes (e.g. 250 g, 500 g, 1 kg). Each weight option has its own independent price and is saved permanently to Supabase.
+                    </p>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center flex-wrap gap-1.5">
+                    <span className="text-[10px] font-bold text-zinc-400 mr-1">Quick Add:</span>
+                    {[
+                      { label: '+ 100 g', weight: '100 g', price: 99 },
+                      { label: '+ 250 g', weight: '250 g', price: 149 },
+                      { label: '+ 500 g', weight: '500 g', price: 279 },
+                      { label: '+ 1 kg', weight: '1 kg', price: 499 },
+                      { label: '+ 5 kg', weight: '5 kg', price: 2199 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => handleAddVariant(preset.weight, preset.price)}
+                        className="bg-[#242424] hover:bg-[#F4B400] hover:text-[#111111] text-zinc-300 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-zinc-700 transition-all"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Variants List */}
+                <div className="space-y-3">
+                  {formVariants.map((variant, index) => (
+                    <div 
+                      key={variant.id || index}
+                      className="bg-[#121212] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 transition-all"
+                    >
+                      {/* Reorder and Index Indicator */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex flex-col gap-1">
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => handleMoveVariant(index, 'up')}
+                            className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-zinc-300"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === formVariants.length - 1}
+                            onClick={() => handleMoveVariant(index, 'down')}
+                            className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-zinc-300"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="w-6 text-center text-xs font-mono font-bold text-[#F4B400]">
+                          #{index + 1}
+                        </span>
+                      </div>
+
+                      {/* Weight / Pack Size */}
+                      <div className="flex-1 min-w-[130px]">
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          Weight / Pack Size *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 250 g or 1 kg"
+                          value={variant.weight || variant.size || ''}
+                          onChange={(e) => handleUpdateVariant(index, 'weight', e.target.value)}
+                          className="w-full bg-[#1C1C1C] text-white font-bold text-xs p-2.5 rounded-xl border border-zinc-700 focus:border-[#F4B400] focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Selling Price (₹) */}
+                      <div className="w-full sm:w-28">
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          Selling Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          placeholder="₹149"
+                          value={variant.price}
+                          onChange={(e) => handleUpdateVariant(index, 'price', Number(e.target.value))}
+                          className="w-full bg-[#1C1C1C] text-[#F4B400] font-black text-xs p-2.5 rounded-xl border border-zinc-700 focus:border-[#F4B400] focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Original MRP Price (₹) */}
+                      <div className="w-full sm:w-28">
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          MRP Price (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="₹180"
+                          value={variant.originalPrice || ''}
+                          onChange={(e) => handleUpdateVariant(index, 'originalPrice', e.target.value ? Number(e.target.value) : undefined)}
+                          className="w-full bg-[#1C1C1C] text-zinc-400 text-xs p-2.5 rounded-xl border border-zinc-700 focus:border-[#F4B400] focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Stock */}
+                      <div className="w-full sm:w-24">
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          Stock
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="50"
+                          value={variant.stock !== undefined ? variant.stock : formStock}
+                          onChange={(e) => handleUpdateVariant(index, 'stock', Number(e.target.value))}
+                          className="w-full bg-[#1C1C1C] text-white text-xs p-2.5 rounded-xl border border-zinc-700 focus:border-[#F4B400] focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Status / Actions */}
+                      <div className="flex items-center justify-end gap-2 pt-2 sm:pt-4">
+                        {index === 0 && (
+                          <span className="bg-[#F4B400]/20 text-[#F4B400] text-[9px] font-extrabold px-2 py-1 rounded-md border border-[#F4B400]/40">
+                            DEFAULT
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVariant(index)}
+                          className="p-2 bg-rose-950/60 hover:bg-rose-800 text-rose-400 hover:text-white rounded-xl transition-all"
+                          title="Remove Weight Option"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add Another Weight Option Button */}
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAddVariant('1 kg', 499)}
+                    className="bg-[#262626] hover:bg-[#333333] text-[#F4B400] hover:text-white text-xs font-bold px-4 py-2.5 rounded-xl border border-[#F4B400]/40 flex items-center gap-1.5 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Custom Pack Size / Weight Option</span>
+                  </button>
+
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    {formVariants.length} option{formVariants.length > 1 ? 's' : ''} configured
+                  </span>
+                </div>
+              </div>
+
+              {/* Category, SKU, Default Weight & Brand */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="text-xs font-bold text-zinc-300 block mb-1">Category *</label>
@@ -769,7 +1079,7 @@ export const AdminProductManager: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-zinc-300 block mb-1">SKU Code</label>
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Base SKU Code</label>
                   <input
                     type="text"
                     value={formSku}
@@ -779,12 +1089,12 @@ export const AdminProductManager: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-zinc-300 block mb-1">Weight / Pack</label>
+                  <label className="text-xs font-bold text-zinc-300 block mb-1">Primary Weight Label</label>
                   <input
                     type="text"
                     value={formWeight}
                     onChange={(e) => setFormWeight(e.target.value)}
-                    placeholder="e.g. 500g"
+                    placeholder="e.g. 250 g"
                     className="w-full bg-[#1A1A1A] text-white text-xs p-3 rounded-xl border border-zinc-700"
                   />
                 </div>

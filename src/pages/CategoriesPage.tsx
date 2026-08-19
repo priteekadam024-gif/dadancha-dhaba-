@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { getCategoryProductCount } from '../utils/categoryUtils';
 
 export const CategoriesPage: React.FC = () => {
   const { language, categories, products, navigateTo } = useApp();
@@ -27,7 +28,7 @@ export const CategoriesPage: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {visibleCategories.map((cat) => {
-          const catItemCount = products.filter((p) => p.categoryId === cat.id || p.categoryName === cat.nameEn).length;
+          const catItemCount = getCategoryProductCount(cat, products);
 
           return (
             <div

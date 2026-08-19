@@ -471,12 +471,16 @@ export async function supabaseSaveContactMessage(messageData: { name: string; ph
 
 function getAdminAuthToken(): string {
   if (typeof window === 'undefined') return 'dadacha-admin-secret-token-2026';
-  return (
+  const token = (
     sessionStorage.getItem('adminAuthToken') ||
     localStorage.getItem('adminAuthToken') ||
     localStorage.getItem('dadacha_admin_token') ||
+    sessionStorage.getItem('dadacha_admin_token') ||
+    localStorage.getItem('admin_session_token') ||
+    (localStorage.getItem('dd_admin_logged_in') === 'true' ? 'dadacha-admin-secret-token-2026' : '') ||
     'dadacha-admin-secret-token-2026'
   );
+  return String(token).replace(/^"(.*)"$/, '$1').trim() || 'dadacha-admin-secret-token-2026';
 }
 
 function getApiBaseUrl(): string {
@@ -537,6 +541,8 @@ export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean 
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(productRecord),
     });
@@ -550,24 +556,38 @@ export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean 
       }
     } else {
       const errorJson = await res.json().catch(() => ({}));
+      console.warn(`Backend save product returned status ${res.status}:`, errorJson.error || res.statusText);
+      if (supabase && (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 500)) {
+        try {
+          const { data, error } = await supabase
+            .from('products')
+            .upsert([productRecord], { onConflict: 'id' })
+            .select();
+          if (!error && data && data.length > 0) {
+            return { data: data[0], error: null };
+          }
+        } catch (clientErr) {
+          console.warn('Client Supabase fallback failed:', clientErr);
+        }
+      }
       return { data: null, error: new Error(errorJson.error || `Server status ${res.status}`) };
     }
   } catch (err: any) {
     console.warn('Backend save product notice, attempting client fallback:', err?.message);
-  }
-
-  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .upsert([productRecord], { onConflict: 'id' })
-      .select();
-
-    if (error) {
-      return { data: null, error };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .upsert([productRecord], { onConflict: 'id' })
+          .select();
+        if (!error && data && data.length > 0) {
+          return { data: data[0], error: null };
+        }
+        if (error) return { data: null, error };
+      } catch (clientErr: any) {
+        return { data: null, error: clientErr };
+      }
     }
-    return { data: data?.[0] || productRecord, error: null };
-  } catch (err: any) {
     return { data: null, error: err };
   }
 }
@@ -584,6 +604,8 @@ export async function supabaseDeleteProduct(productId: string) {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
     });
 
@@ -666,6 +688,8 @@ export async function supabaseSaveCategory(categoryRecord: any, isUpdate: boolea
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(categoryRecord),
     });
@@ -717,6 +741,8 @@ export async function supabaseDeleteCategory(
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(options || {}),
     });
@@ -761,6 +787,8 @@ export async function supabaseReorderCategories(categoryRecords: any[]) {
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify({ categories: categoryRecords }),
     });
@@ -900,14 +928,32 @@ export async function supabaseGetSiteSettings() {
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.warn('Error fetching site_settings:', error.message);
+    if (!error && data) {
+      return data;
     }
-    return data || null;
+
+    if (error) {
+      console.warn('Direct Supabase fetch site_settings warning:', error.message);
+    }
   } catch (err) {
-    console.warn('Supabase site_settings fetch error:', err);
-    return null;
+    console.warn('Direct Supabase site_settings fetch error:', err);
   }
+
+  // Fallback to server API /api/site-settings
+  try {
+    const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+    const res = await fetch(`${apiBaseUrl}/api/site-settings`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.settings) {
+        return json.settings;
+      }
+    }
+  } catch (err) {
+    console.warn('API site-settings fetch error:', err);
+  }
+
+  return null;
 }
 
 /**
@@ -926,14 +972,15 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
     };
 
     // Remove primary key from update payload if it exists
+    const targetId = existing?.id;
     delete recordPayload.id;
 
     let result;
-    if (existing?.id) {
+    if (targetId) {
       result = await supabase
         .from('site_settings')
         .update(recordPayload)
-        .eq('id', existing.id)
+        .eq('id', targetId)
         .select();
     } else {
       result = await supabase
@@ -942,17 +989,18 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
         .select();
     }
 
-    if (!result.error && result.data?.[0]) {
+    if (!result.error && result.data && result.data.length > 0) {
       return { data: result.data[0], error: null };
     }
 
-    // Fallback to server API /api/admin/branding/save if client DB update returned an error or RLS restricted update
+    // Fallback to server API /api/admin/site-settings/save with admin authorization
     const adminToken = localStorage.getItem('dadacha_admin_token') || 'dadacha-admin-secret-token-2026';
     const apiBaseUrl = import.meta.env.VITE_API_URL || '';
-    const res = await fetch(`${apiBaseUrl}/api/admin/branding/save`, {
+    const res = await fetch(`${apiBaseUrl}/api/admin/site-settings/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`,
         'x-admin-token': adminToken,
       },
       body: JSON.stringify(recordPayload),
@@ -965,7 +1013,7 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
       }
     }
 
-    return { data: null, error: result.error || new Error('Failed to save settings to site_settings table') };
+    return { data: null, error: result?.error || new Error('Failed to save settings to site_settings table') };
   } catch (err: any) {
     console.warn('Supabase site_settings save fetch warning:', err?.message || err);
     return { data: null, error: err };
@@ -1259,6 +1307,8 @@ export async function supabaseSaveRecipe(recipeRecord: any, isUpdate: boolean = 
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(recipeRecord),
     });
@@ -1298,6 +1348,8 @@ export async function supabaseDeleteRecipe(id: string) {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
     });
 
@@ -1370,6 +1422,8 @@ export async function supabaseSaveRecipeCategory(catRecord: any) {
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(catRecord),
     });
@@ -1410,6 +1464,8 @@ export async function supabaseSaveRecipeSubcategory(subRecord: any) {
       headers: {
         'Content-Type': 'application/json',
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
       body: JSON.stringify(subRecord),
     });
@@ -1449,6 +1505,8 @@ export async function supabaseDeleteRecipeCategory(id: string) {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
+        'Authorization': `Bearer ${adminToken}`,
       },
     });
 

@@ -80,59 +80,66 @@ export const CartPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Cart Item List */}
         <div className="lg:col-span-8 space-y-4">
-          {cart.map((item) => (
-            <div
-              key={item.product.id}
-              className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
-            >
-              <img
-                src={item.product.images[0]}
-                alt={item.product.nameEn}
-                className="w-20 h-20 object-cover rounded-xl border border-zinc-700 shrink-0"
-              />
+          {cart.map((item, idx) => {
+            const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+            const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight);
+            const itemOriginalPrice = item.selectedVariant?.originalPrice || item.product.originalPrice;
+            const variantKey = item.selectedVariant ? `${item.product.id}_${item.selectedVariant.id}` : (item.selectedWeight ? `${item.product.id}_${item.selectedWeight}` : `${item.product.id}_${idx}`);
 
-              <div className="flex-1 min-w-0 space-y-1 text-center sm:text-left">
-                <span className="text-[10px] bg-zinc-800 text-zinc-300 font-semibold px-2 py-0.5 rounded">
-                  {item.product.weight}
-                </span>
-                <h3 className="font-bold text-white text-base font-marathi truncate">
-                  {language === 'mr' ? item.product.nameMr : item.product.nameEn}
-                </h3>
-                <p className="text-xs text-[#F4B400] font-bold">
-                  ₹{item.product.price} <span className="text-zinc-500 line-through text-[11px] ml-1">₹{item.product.originalPrice}</span>
-                </p>
-              </div>
+            return (
+              <div
+                key={variantKey}
+                className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
+              >
+                <img
+                  src={item.product.images[0]}
+                  alt={item.product.nameEn}
+                  className="w-20 h-20 object-cover rounded-xl border border-zinc-700 shrink-0"
+                />
 
-              {/* Quantity Controls */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center bg-[#1F1F1F] border border-zinc-700 rounded-xl p-1">
-                  <button
-                    onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)}
-                    className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
-                  >
-                    -
-                  </button>
-                  <span className="w-8 text-center font-bold text-white text-xs">
-                    {item.quantity}
+                <div className="flex-1 min-w-0 space-y-1 text-center sm:text-left">
+                  <span className="text-[10px] bg-[#F4B400]/20 text-[#F4B400] border border-[#F4B400]/40 font-extrabold px-2.5 py-0.5 rounded-full inline-block">
+                    {itemWeight}
                   </span>
-                  <button
-                    onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)}
-                    className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
-                  >
-                    +
-                  </button>
+                  <h3 className="font-bold text-white text-base font-marathi truncate">
+                    {language === 'mr' ? item.product.nameMr : item.product.nameEn}
+                  </h3>
+                  <p className="text-xs text-[#F4B400] font-bold">
+                    ₹{itemPrice} {itemOriginalPrice && itemOriginalPrice > itemPrice && <span className="text-zinc-500 line-through text-[11px] ml-1">₹{itemOriginalPrice}</span>}
+                  </p>
                 </div>
 
-                <button
-                  onClick={() => removeFromCart(item.product.id)}
-                  className="p-2 text-zinc-500 hover:text-rose-400 transition-colors"
-                  title="Remove item"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* Quantity Controls */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center bg-[#1F1F1F] border border-zinc-700 rounded-xl p-1">
+                    <button
+                      onClick={() => updateCartQuantity(item.product.id, item.quantity - 1, item.selectedVariant?.id || item.selectedWeight)}
+                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
+                    >
+                      -
+                    </button>
+                    <span className="w-8 text-center font-bold text-white text-xs">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => updateCartQuantity(item.product.id, item.quantity + 1, item.selectedVariant?.id || item.selectedWeight)}
+                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => removeFromCart(item.product.id, item.selectedVariant?.id || item.selectedWeight)}
+                    className="p-2 text-zinc-500 hover:text-rose-400 transition-colors"
+                    title="Remove item"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Order Summary & Coupon Card */}

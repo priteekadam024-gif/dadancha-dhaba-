@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Category, Product } from '../types';
+import { getCategoryProducts, getCategoryProductCount } from '../utils/categoryUtils';
 import { 
   Plus, Edit2, Trash2, Eye, EyeOff, Star, ArrowUp, ArrowDown, 
   Folder, Image as ImageIcon, Search, Tag, Layers, Check, X, 
@@ -66,7 +67,7 @@ export const AdminCategoryManager: React.FC = () => {
   // Calculate Category Analytics Helper
   const getCategoryStats = (catId: string) => {
     const targetCat = safeCategories.find(c => c.id === catId);
-    const catProducts = safeProducts.filter((p) => p && (p.categoryId === catId || p.categoryName === targetCat?.nameEn));
+    const catProducts = getCategoryProducts(targetCat || catId, safeProducts);
     const productCount = catProducts.length;
 
     let totalOrdersCount = 0;
@@ -1131,7 +1132,7 @@ export const AdminCategoryManager: React.FC = () => {
 
             {/* Product count notice */}
             {(() => {
-              const catProducts = products.filter((p) => p.categoryId === deleteCategoryTarget.id || p.categoryName === deleteCategoryTarget.nameEn);
+              const catProducts = getCategoryProducts(deleteCategoryTarget, products);
               const count = catProducts.length;
 
               return (
@@ -1163,10 +1164,10 @@ export const AdminCategoryManager: React.FC = () => {
                               {categories
                                 .filter((c) => c.id !== deleteCategoryTarget.id)
                                 .map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    Move to: {c.nameEn}
-                                  </option>
-                                ))}
+                                   <option key={c.id} value={c.id}>
+                                     Move to: {c.nameEn}
+                                   </option>
+                                 ))}
                             </select>
                           )}
                         </div>
@@ -1231,31 +1232,29 @@ export const AdminCategoryManager: React.FC = () => {
             </div>
 
             <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
-              {products
-                .filter((p) => p.categoryId === viewProductsCat.id || p.categoryName === viewProductsCat.nameEn)
-                .map((prod) => (
-                  <div key={prod.id} className="bg-[#111111] p-3 rounded-2xl border border-zinc-800 flex justify-between items-center gap-3">
-                    <div className="flex items-center gap-3">
-                      <img src={prod.images[0]} alt={prod.nameEn} className="w-10 h-10 rounded-xl object-cover border border-zinc-800" />
-                      <div>
-                        <p className="font-extrabold text-white text-xs">{prod.nameEn}</p>
-                        <p className="text-[11px] text-[#F4B400] font-bold">₹{prod.price} • Stock: {prod.stock}</p>
-                      </div>
+              {getCategoryProducts(viewProductsCat, products).map((prod) => (
+                <div key={prod.id} className="bg-[#111111] p-3 rounded-2xl border border-zinc-800 flex justify-between items-center gap-3">
+                  <div className="flex items-center gap-3">
+                    <img src={prod.images[0]} alt={prod.nameEn} className="w-10 h-10 rounded-xl object-cover border border-zinc-800" />
+                    <div>
+                      <p className="font-extrabold text-white text-xs">{prod.nameEn}</p>
+                      <p className="text-[11px] text-[#F4B400] font-bold">₹{prod.price} • Stock: {prod.stock}</p>
                     </div>
-
-                    <button
-                      onClick={() => {
-                        setViewProductsCat(null);
-                        navigateTo('shop');
-                      }}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold px-3 py-1.5 rounded-xl"
-                    >
-                      View Product
-                    </button>
                   </div>
-                ))}
 
-              {products.filter((p) => p.categoryId === viewProductsCat.id || p.categoryName === viewProductsCat.nameEn).length === 0 && (
+                  <button
+                    onClick={() => {
+                      setViewProductsCat(null);
+                      navigateTo('shop');
+                    }}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold px-3 py-1.5 rounded-xl"
+                  >
+                    View Product
+                  </button>
+                </div>
+              ))}
+
+              {getCategoryProducts(viewProductsCat, products).length === 0 && (
                 <div className="text-center py-8 text-zinc-500 text-xs">
                   No products assigned to this category yet.
                 </div>
@@ -1297,15 +1296,13 @@ export const AdminCategoryManager: React.FC = () => {
               <div>
                 <h4 className="font-extrabold text-white text-sm mb-3">Products in this Category</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {products
-                    .filter((p) => p.categoryId === previewCat.id || p.categoryName === previewCat.nameEn)
-                    .map((p) => (
-                      <div key={p.id} className="bg-[#161616] p-3 rounded-2xl border border-zinc-800">
-                        <img src={p.images[0]} alt={p.nameEn} className="w-full h-24 object-cover rounded-xl mb-2" />
-                        <p className="font-bold text-white text-xs truncate">{p.nameEn}</p>
-                        <p className="text-[#F4B400] font-black text-xs mt-1">₹{p.price}</p>
-                      </div>
-                    ))}
+                  {getCategoryProducts(previewCat, products).map((p) => (
+                    <div key={p.id} className="bg-[#161616] p-3 rounded-2xl border border-zinc-800">
+                      <img src={p.images[0]} alt={p.nameEn} className="w-full h-24 object-cover rounded-xl mb-2" />
+                      <p className="font-bold text-white text-xs truncate">{p.nameEn}</p>
+                      <p className="text-[#F4B400] font-black text-xs mt-1">₹{p.price}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

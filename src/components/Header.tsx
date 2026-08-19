@@ -50,12 +50,12 @@ export const Header: React.FC = () => {
               <MapPin className="w-3 h-3" /> {language === 'mr' ? 'पुणे | कोल्हापूर | मुंबई' : 'Pune | Kolhapur | Mumbai'}
             </span>
             <a 
-              href={`tel:${contactConfig.phone.replace(/[^0-9+]/g, '')}`} 
+              href={`tel:${(contactConfig.phone || '').replace(/[^0-9+]/g, '')}`} 
               className="flex items-center gap-1 hover:text-white transition-colors"
               title="Call Dadacha Dhaba"
             >
               <PhoneCall className="w-3 h-3 text-zinc-900" />
-              <span>📞 {contactConfig.phone}</span>
+              <span>📞 {contactConfig.phone || '+91 91370 50018'}</span>
             </a>
           </div>
         </div>

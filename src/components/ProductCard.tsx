@@ -1,7 +1,7 @@
 import React from 'react';
 import { Product } from '../types';
 import { useApp } from '../context/AppContext';
-import { Heart, ShoppingBag, Star, Eye, ShieldCheck } from 'lucide-react';
+import { Heart, ShoppingBag, Star, Eye } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -83,7 +83,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <div>
           <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
             <span className="bg-zinc-800 text-zinc-300 font-semibold px-2 py-0.5 rounded text-[10px]">
-              {product.weight}
+              {product.variants && product.variants.length > 1 
+                ? `${product.variants.length} Sizes (${product.weight})`
+                : product.weight}
             </span>
             <div className="flex items-center gap-1 text-[#F4B400]">
               <Star className="w-3.5 h-3.5 fill-[#F4B400]" />
@@ -106,20 +108,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Pricing & Add to Cart */}
         <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-          <div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-extrabold text-[#F4B400]">
-                ₹{product.price}
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-lg font-extrabold text-[#F4B400]">
+              ₹{product.price}
+            </span>
+            {product.originalPrice > product.price && (
+              <span className="text-xs text-zinc-500 line-through">
+                ₹{product.originalPrice}
               </span>
-              {product.originalPrice > product.price && (
-                <span className="text-xs text-zinc-500 line-through">
-                  ₹{product.originalPrice}
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5">
-              <ShieldCheck className="w-3 h-3" /> {language === 'mr' ? '१००% गावरान' : 'Pure Recipe'}
-            </p>
+            )}
           </div>
 
           <button

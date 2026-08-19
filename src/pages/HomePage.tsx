@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { ProductCard } from '../components/ProductCard';
 import { LatestReelsSection } from '../components/LatestReelsSection';
 import { OfficialLogo } from '../components/OfficialLogo';
+import { getCategoryProductCount } from '../utils/categoryUtils';
 import { 
   ShoppingBag, Video, Flame, Sparkles, Award, ShieldCheck, 
   Truck, ArrowRight, Star, Heart, Play, Clock, ChevronRight, 
@@ -235,7 +236,7 @@ export const HomePage: React.FC = () => {
                 {language === 'mr' ? cat.nameMr : cat.nameEn}
               </h3>
               <span className="text-[10px] text-zinc-500 font-semibold mt-1">
-                {cat.itemCount} {language === 'mr' ? 'उत्पादने' : 'Products'}
+                {getCategoryProductCount(cat, products)} {language === 'mr' ? 'उत्पादने' : 'Products'}
               </span>
             </div>
           ))}
