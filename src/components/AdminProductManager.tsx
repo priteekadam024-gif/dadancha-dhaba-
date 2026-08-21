@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, ProductVariant } from '../types';
 import { findMatchingImages } from '../utils/imageSearch';
+import { isProductInCategory } from '../utils/categoryUtils';
 import { 
   Plus, Edit, Trash2, Eye, Search, Filter, ArrowUpDown, 
   Upload, X, Check, Sparkles, Image as ImageIcon, Download, 
@@ -118,15 +119,21 @@ export const AdminProductManager: React.FC = () => {
 
   // Filter Products
   const filteredProducts = products.filter((p) => {
-    const q = searchQuery.toLowerCase().trim();
+    if (!p) return false;
+    const q = (searchQuery || '').toLowerCase().trim();
+    const nameEn = (p.nameEn || '').toLowerCase();
+    const nameMr = (p.nameMr || '');
+    const sku = (p.sku || '').toLowerCase();
+    const catName = (p.categoryName || '').toLowerCase();
+
     const matchesSearch = 
       !q ||
-      p.nameEn.toLowerCase().includes(q) ||
-      p.nameMr.includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      p.categoryName.toLowerCase().includes(q);
+      nameEn.includes(q) ||
+      nameMr.includes(q) ||
+      sku.includes(q) ||
+      catName.includes(q);
 
-    const matchesCategory = categoryFilter === 'all' || p.categoryId === categoryFilter;
+    const matchesCategory = categoryFilter === 'all' || isProductInCategory(p, categoryFilter);
 
     let matchesStock = true;
     if (stockFilter === 'active') matchesStock = p.stock > 0;

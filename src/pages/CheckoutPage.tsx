@@ -435,13 +435,13 @@ export const CheckoutPage: React.FC = () => {
             </h3>
 
             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-              {cart.map((item, idx) => {
+              {cart.map((item) => {
                 const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
                 const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
-                const key = item.selectedVariant ? `${item.product.id}_${item.selectedVariant.id}` : (item.selectedWeight ? `${item.product.id}_${item.selectedWeight}` : `${item.product.id}_${idx}`);
+                const stableKey = item.id || `cart_item_${item.product.id}_${item.selectedVariant?.id || item.selectedWeight || 'default'}`;
 
                 return (
-                  <div key={key} className="flex items-center gap-3 text-xs">
+                  <div key={stableKey} className="flex items-center gap-3 text-xs">
                     <img src={item.product.images[0]} alt="p" className="w-10 h-10 object-cover rounded-lg border border-zinc-800" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-white truncate font-marathi">

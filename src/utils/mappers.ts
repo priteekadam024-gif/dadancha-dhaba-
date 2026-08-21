@@ -49,24 +49,28 @@ export function mapDbProductToFrontend(row: any): Product {
         }))
     : undefined;
 
+  const nameEn = (row.name_en || row.name || row.nameEn || row.title_en || 'Product').trim();
+  const nameMr = (row.name_mr || row.marathi_name || row.nameMr || row.title_mr || nameEn).trim();
+  const rawStock = row.stock_quantity !== undefined ? Number(row.stock_quantity) : (row.stock !== undefined ? Number(row.stock) : (row.in_stock ? 50 : 0));
+
   return {
     id: String(row.id),
-    nameEn: row.name_en || row.nameEn || row.title_en || 'Product',
-    nameMr: row.name_mr || row.nameMr || row.title_mr || row.name_en || 'उत्पादन',
-    slug: row.slug || (row.name_en ? row.name_en.toLowerCase().replace(/[^a-z0-9]+/g, '-') : String(row.id)),
+    nameEn: nameEn,
+    nameMr: nameMr,
+    slug: row.slug || (nameEn ? nameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-') : String(row.id)),
     price: basePrice,
     originalPrice: Number(row.original_price || row.originalPrice) || Math.round(basePrice * 1.25),
-    discountPercent: Number(row.discount_percent || row.discountPercent) || 0,
-    stock: Number(row.stock_quantity ?? row.stock) ?? 0,
+    discountPercent: Number(row.discount_percent || row.discount || row.discountPercent) || 0,
+    stock: isNaN(rawStock) ? 50 : rawStock,
     sku: row.sku || `DD-${row.id}`,
     descriptionEn: row.description_en || row.descriptionEn || '',
     descriptionMr: row.description_mr || row.descriptionMr || '',
-    ingredientsEn: row.ingredients_en || row.ingredientsEn || '',
-    ingredientsMr: row.ingredients_mr || row.ingredientsMr || '',
+    ingredientsEn: row.ingredients_en || row.ingredients || row.ingredientsEn || '',
+    ingredientsMr: row.ingredients_mr || row.marathi_ingredients || row.ingredientsMr || '',
     weight: baseWeight,
     brand: row.brand || 'Dadacha Dhaba',
-    categoryId: row.category_id || row.category || 'spices',
-    categoryName: row.category_name || row.category || 'Spices',
+    categoryId: row.category_id || row.category || 'special masale',
+    categoryName: row.category || row.category_name || 'Dadanche Special masale',
     ratings: Number(row.rating || row.ratings) || 5.0,
     reviewCount: Number(row.review_count || row.reviewCount) || 0,
     images: imagesArr,
@@ -76,7 +80,7 @@ export function mapDbProductToFrontend(row: any): Product {
     isBestSeller: Boolean(row.is_bestseller || row.isBestSeller),
     isSpecialMasala: Boolean(row.is_special_masala || row.isSpecialMasala),
     isKitchenAppliance: Boolean(row.is_kitchen_appliance || row.isKitchenAppliance),
-    createdAt: row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+    createdAt: row.created_at ? String(row.created_at).split('T')[0] : new Date().toISOString().split('T')[0],
   };
 }
 
@@ -405,36 +409,38 @@ export function mapDbRecipeToFrontend(row: any): Recipe {
  * Maps frontend Recipe to Supabase 'recipes' database row
  */
 export function mapFrontendRecipeToDb(r: Recipe): any {
+  const primaryImg = r.image || (r.images && r.images[0]) || 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800';
   return {
     id: r.id,
-    title_en: r.titleEn,
-    title_mr: r.titleMr,
+    title_en: r.titleEn || r.titleMr || 'Recipe',
+    title_mr: r.titleMr || r.titleEn || 'रेसिपी',
     slug: r.slug || r.id,
-    description_en: r.descriptionEn,
-    description_mr: r.descriptionMr,
-    category_id: r.categoryId,
-    category_name: r.categoryName,
+    description_en: r.descriptionEn || '',
+    description_mr: r.descriptionMr || '',
+    category_id: r.categoryId || 'traditional',
+    category_name: r.categoryName || 'Traditional Recipes',
     subcategory_id: r.subcategoryId || null,
     subcategory_name: r.subcategoryName || null,
-    read_time: r.readTime,
-    prep_time: r.prepTime,
-    cook_time: r.cookTime,
-    servings: r.servings,
-    difficulty: r.difficulty,
-    ingredients_en: r.ingredientsEn,
-    ingredients_mr: r.ingredientsMr,
-    steps_en: r.stepsEn,
-    steps_mr: r.stepsMr,
-    tips_en: r.tipsEn,
-    tips_mr: r.tipsMr,
-    serving_suggestions_en: r.servingSuggestionsEn,
-    serving_suggestions_mr: r.servingSuggestionsMr,
-    image_url: r.image,
-    images: r.images,
+    read_time: r.readTime || '5 min read',
+    prep_time: r.prepTime || '15 mins',
+    cook_time: r.cookTime || '30 mins',
+    servings: r.servings || '4 Persons',
+    difficulty: r.difficulty || 'Medium',
+    ingredients_en: Array.isArray(r.ingredientsEn) ? r.ingredientsEn : [],
+    ingredients_mr: Array.isArray(r.ingredientsMr) ? r.ingredientsMr : [],
+    steps_en: Array.isArray(r.stepsEn) ? r.stepsEn : [],
+    steps_mr: Array.isArray(r.stepsMr) ? r.stepsMr : [],
+    tips_en: r.tipsEn || '',
+    tips_mr: r.tipsMr || '',
+    serving_suggestions_en: r.servingSuggestionsEn || '',
+    serving_suggestions_mr: r.servingSuggestionsMr || '',
+    image: primaryImg,
+    image_url: primaryImg,
+    images: Array.isArray(r.images) && r.images.length > 0 ? r.images : [primaryImg],
     related_product_id: r.relatedProductId || null,
     related_product_name: r.relatedProductName || null,
-    author: r.author,
-    is_published: r.isPublished,
+    author: r.author || 'Dadacha Dhaba Chef',
+    is_published: r.isPublished !== undefined ? r.isPublished : true,
     updated_at: new Date().toISOString(),
   };
 }

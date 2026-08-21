@@ -667,30 +667,34 @@ export const UserDashboardPage: React.FC = () => {
 
           {cart.length > 0 ? (
             <div className="space-y-3">
-              {cart.map((item) => (
-                <div key={item.product.id} className="bg-[#161616] border border-zinc-800 p-4 rounded-2xl flex items-center gap-4">
-                  <img src={item.product.images[0]} alt="p" className="w-14 h-14 object-cover rounded-xl" />
-                  <div className="flex-1">
-                    <h4 className="font-bold text-white text-xs font-marathi">{language === 'mr' ? item.product.nameMr : item.product.nameEn}</h4>
-                    <p className="text-xs text-[#F4B400] font-black">₹{item.product.price} x {item.quantity}</p>
+              {cart.map((item) => {
+                const stableCartId = item.id || `cart_item_${item.product.id}_${item.selectedVariant?.id || item.selectedWeight || 'default'}`;
+                const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+                return (
+                  <div key={stableCartId} id={`dashboard-cart-${stableCartId}`} className="bg-[#161616] border border-zinc-800 p-4 rounded-2xl flex items-center gap-4">
+                    <img src={item.product.images[0]} alt={item.product.nameEn} className="w-14 h-14 object-cover rounded-xl" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-white text-xs font-marathi truncate">{language === 'mr' ? item.product.nameMr : item.product.nameEn}</h4>
+                      <p className="text-xs text-[#F4B400] font-black">₹{itemPrice} x {item.quantity}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateCartQuantity(stableCartId, item.quantity - 1)}
+                        className="w-7 h-7 bg-zinc-800 text-white rounded-lg font-bold text-xs hover:bg-zinc-700 transition-colors"
+                      >
+                        -
+                      </button>
+                      <span className="text-xs font-bold text-white px-2">{item.quantity}</span>
+                      <button
+                        onClick={() => updateCartQuantity(stableCartId, item.quantity + 1)}
+                        className="w-7 h-7 bg-zinc-800 text-white rounded-lg font-bold text-xs hover:bg-zinc-700 transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)}
-                      className="w-7 h-7 bg-zinc-800 text-white rounded-lg font-bold text-xs"
-                    >
-                      -
-                    </button>
-                    <span className="text-xs font-bold text-white px-2">{item.quantity}</span>
-                    <button
-                      onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)}
-                      className="w-7 h-7 bg-zinc-800 text-white rounded-lg font-bold text-xs"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-xs text-zinc-500">Your cart is currently empty.</p>

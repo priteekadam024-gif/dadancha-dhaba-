@@ -7,21 +7,27 @@ import { isProductInCategory, getCategoryProductCount } from '../utils/categoryU
 export const ShopPage: React.FC = () => {
   const { 
     language, products, categories, selectedCategoryId, 
-    searchQuery, setSearchQuery 
+    searchQuery, setSearchQuery, isLoadingData 
   } = useApp();
 
   const [activeCategory, setActiveCategory] = useState<string>(selectedCategoryId || 'all');
   const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'rating'>('featured');
   const [maxPrice, setMaxPrice] = useState<number>(150000);
 
-  // Filter products
+  // Filter products safely with null guards
   let filteredProducts = products.filter((p) => {
+    if (!p) return false;
     const matchesCategory = activeCategory === 'all' || isProductInCategory(p, activeCategory);
+    const q = (searchQuery || '').toLowerCase().trim();
+    const nameEn = (p.nameEn || '').toLowerCase();
+    const nameMr = (p.nameMr || '');
+    const catName = (p.categoryName || '').toLowerCase();
     const matchesSearch = 
-      p.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      p.nameMr.includes(searchQuery) || 
-      p.categoryName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesPrice = p.price <= maxPrice;
+      !q ||
+      nameEn.includes(q) || 
+      nameMr.includes(q) || 
+      catName.includes(q);
+    const matchesPrice = Number(p.price || 0) <= maxPrice;
     return matchesCategory && matchesSearch && matchesPrice;
   });
 
@@ -135,7 +141,18 @@ export const ShopPage: React.FC = () => {
       </div>
 
       {/* Product Grid */}
-      {filteredProducts.length > 0 ? (
+      {isLoadingData && products.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 space-y-4 animate-pulse">
+              <div className="aspect-square bg-zinc-800/80 rounded-xl" />
+              <div className="h-4 bg-zinc-800 rounded w-3/4" />
+              <div className="h-3 bg-zinc-800/60 rounded w-1/2" />
+              <div className="h-8 bg-zinc-800 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredProducts.map((prod) => (
             <ProductCard key={prod.id} product={prod} />

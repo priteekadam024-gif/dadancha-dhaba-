@@ -13,7 +13,7 @@ import {
 export const HomePage: React.FC = () => {
   const { 
     language, navigateTo, products, categories, 
-    videos, gallery, reviews, recipes 
+    videos, gallery, reviews, recipes, isLoadingData 
   } = useApp();
 
   // Flash sale countdown timer (12 hours)
@@ -263,11 +263,31 @@ export const HomePage: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {products.map((prod) => (
-            <ProductCard key={prod.id} product={prod} />
-          ))}
-        </div>
+        {isLoadingData && products.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 space-y-4 animate-pulse">
+                <div className="aspect-square bg-zinc-800/80 rounded-xl" />
+                <div className="h-4 bg-zinc-800 rounded w-3/4" />
+                <div className="h-3 bg-zinc-800/60 rounded w-1/2" />
+                <div className="h-8 bg-zinc-800 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : products.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {products.map((prod) => (
+              <ProductCard key={prod.id} product={prod} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-[#141414] rounded-2xl border border-zinc-800 space-y-2">
+            <p className="text-3xl">🍲</p>
+            <p className="text-zinc-400 text-sm font-marathi">
+              {language === 'mr' ? 'सध्या कोणतीही उत्पादने उपलब्ध नाहीत' : 'No products available at the moment.'}
+            </p>
+          </div>
+        )}
       </section>
 
       {/* EMBEDDED INSTAGRAM & YOUTUBE REELS SECTION */}

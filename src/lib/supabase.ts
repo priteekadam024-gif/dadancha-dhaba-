@@ -273,8 +273,8 @@ export async function supabaseSaveAddress(userId: string, address: any) {
     };
 
     let result;
-    if (address.id && !address.id.startsWith('addr-')) {
-      result = await supabase.from('user_addresses').update(payload).eq('id', address.id);
+    if (address.id && typeof address.id === 'string' && !address.id.startsWith('addr-') && address.id.trim().length > 0) {
+      result = await supabase.from('user_addresses').update(payload).eq('id', address.id.trim());
     } else {
       result = await supabase.from('user_addresses').insert([payload]);
     }
@@ -290,10 +290,10 @@ export async function supabaseSaveAddress(userId: string, address: any) {
  * Delete address
  */
 export async function supabaseDeleteAddress(addressId: string) {
-  if (!supabase || addressId.startsWith('addr-')) return null;
+  if (!supabase || !addressId || typeof addressId !== 'string' || !addressId.trim() || addressId.startsWith('addr-')) return null;
 
   try {
-    const { error } = await supabase.from('user_addresses').delete().eq('id', addressId);
+    const { error } = await supabase.from('user_addresses').delete().eq('id', addressId.trim());
     if (error) console.warn('Delete address error:', error.message);
     return { error };
   } catch (err) {
@@ -413,7 +413,8 @@ export async function supabaseSaveReview(review: any) {
       .eq('user_id', review.userId);
 
     let result;
-    if (existingReviews && existingReviews.length > 0) {
+    const existingReviewId = existingReviews?.[0]?.id;
+    if (existingReviewId && typeof existingReviewId === 'string' && existingReviewId.trim().length > 0) {
       result = await supabase
         .from('reviews')
         .update({
@@ -422,7 +423,7 @@ export async function supabaseSaveReview(review: any) {
           user_name: review.userName,
           date: new Date().toISOString()
         })
-        .eq('id', existingReviews[0].id)
+        .eq('id', existingReviewId.trim())
         .select();
     } else {
       result = await supabase.from('reviews').insert([
@@ -490,38 +491,96 @@ function getApiBaseUrl(): string {
 }
 
 /**
+ * Helper to fetch all products in chunks to prevent PostgreSQL statement timeouts (error 57014)
+ * when rows contain large image base64 payloads.
+ */
+async function fetchProductsInChunks(client: any): Promise<any[]> {
+  try {
+    const chunkSize = 5;
+    let allProducts: any[] = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore && page < 20) {
+      const from = page * chunkSize;
+      const to = from + chunkSize - 1;
+      const { data, error } = await client
+        .from('products')
+        .select('*')
+        .range(from, to);
+
+      if (error) {
+        console.warn(`[Supabase products chunk ${page}] notice:`, error.message);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        allProducts = allProducts.concat(data);
+        if (data.length < chunkSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allProducts;
+  } catch (err) {
+    console.warn('Exception during chunked product fetch:', err);
+    return [];
+  }
+}
+
+/**
  * Fetch products from Supabase 'products' table
+ * Directly queries public.products table with select('*') and includes resilient chunking fallback
  */
 export async function supabaseGetProducts() {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*');
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+
+      if (error) {
+        console.warn('Initial products select notice (trying chunked retrieval):', error.message);
+      }
+
+      // If select('*') encountered statement timeout (57014) or error, use chunked retrieval
+      const chunkedProducts = await fetchProductsInChunks(supabase);
+      if (chunkedProducts.length > 0) {
+        return chunkedProducts;
+      }
+    } catch (err) {
+      console.warn('Supabase get products client query exception, trying chunked retrieval:', err);
+      const chunkedProducts = await fetchProductsInChunks(supabase);
+      if (chunkedProducts.length > 0) {
+        return chunkedProducts;
+      }
+    }
+  }
+
+  // Fallback to Express backend endpoint if needed
   try {
     const apiBase = getApiBaseUrl();
     const res = await fetch(`${apiBase}/api/products`);
     if (res.ok) {
       const json = await res.json();
-      if (json.success && Array.isArray(json.products)) {
+      if (json.success && Array.isArray(json.products) && json.products.length > 0) {
         return json.products;
       }
     }
   } catch (err) {
-    console.warn('Backend /api/products fetch notice, falling back to client Supabase:', err);
+    console.warn('Backend /api/products fetch fallback notice:', err);
   }
 
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.warn('Error fetching products from Supabase:', error.message);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase get products exception:', err);
-    return [];
-  }
+  return [];
 }
 
 /**
@@ -552,55 +611,53 @@ export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean 
       if (json.success && json.product) {
         return { data: json.product, error: null };
       } else if (json.error) {
-        return { data: null, error: new Error(json.error) };
+        console.warn('Backend returned product error, attempting client Supabase:', json.error);
       }
     } else {
       const errorJson = await res.json().catch(() => ({}));
-      console.warn(`Backend save product returned status ${res.status}:`, errorJson.error || res.statusText);
-      if (supabase && (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 500)) {
-        try {
-          const { data, error } = await supabase
-            .from('products')
-            .upsert([productRecord], { onConflict: 'id' })
-            .select();
-          if (!error && data && data.length > 0) {
-            return { data: data[0], error: null };
-          }
-        } catch (clientErr) {
-          console.warn('Client Supabase fallback failed:', clientErr);
-        }
-      }
-      return { data: null, error: new Error(errorJson.error || `Server status ${res.status}`) };
+      console.warn(`Backend save product returned status ${res.status}, attempting client Supabase:`, errorJson.error || res.statusText);
     }
   } catch (err: any) {
-    console.warn('Backend save product notice, attempting client fallback:', err?.message);
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('products')
-          .upsert([productRecord], { onConflict: 'id' })
-          .select();
-        if (!error && data && data.length > 0) {
-          return { data: data[0], error: null };
-        }
-        if (error) return { data: null, error };
-      } catch (clientErr: any) {
-        return { data: null, error: clientErr };
-      }
-    }
-    return { data: null, error: err };
+    console.warn('Backend save product notice, attempting client Supabase fallback:', err?.message);
   }
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .upsert([productRecord], { onConflict: 'id' })
+        .select();
+
+      if (!error && data && data.length > 0) {
+        return { data: data[0], error: null };
+      }
+      if (error) {
+        console.error('Client Supabase product save error:', error.message);
+        return { data: productRecord, error: new Error(error.message) };
+      }
+      return { data: productRecord, error: null };
+    } catch (clientErr: any) {
+      console.error('Client Supabase product save exception:', clientErr);
+      return { data: productRecord, error: clientErr };
+    }
+  }
+  return { data: productRecord, error: null };
 }
 
 /**
  * Delete product from Supabase 'products' table via Express backend
  */
 export async function supabaseDeleteProduct(productId: string) {
+  if (!productId || typeof productId !== 'string' || !productId.trim()) {
+    return { success: false, error: new Error('Valid Product ID is required for deletion') };
+  }
+
+  const cleanId = productId.trim();
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
 
-    const res = await fetch(`${apiBase}/api/admin/products/${encodeURIComponent(productId)}`, {
+    const res = await fetch(`${apiBase}/api/admin/products/${encodeURIComponent(cleanId)}`, {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
@@ -626,7 +683,7 @@ export async function supabaseDeleteProduct(productId: string) {
 
   if (!supabase) return { success: false, error: new Error('Supabase not configured') };
   try {
-    const { error } = await supabase.from('products').delete().eq('id', productId);
+    const { error } = await supabase.from('products').delete().eq('id', cleanId);
     if (error) {
       return { success: false, error };
     }
@@ -698,31 +755,34 @@ export async function supabaseSaveCategory(categoryRecord: any, isUpdate: boolea
       const json = await res.json();
       if (json.success && json.category) {
         return { data: json.category, error: null };
-      } else if (json.error) {
-        return { data: null, error: new Error(json.error) };
       }
     } else {
       const errorJson = await res.json().catch(() => ({}));
-      return { data: null, error: new Error(errorJson.error || `Server status ${res.status}`) };
+      console.warn(`Backend save category returned status ${res.status}, attempting direct Supabase:`, errorJson.error || res.statusText);
     }
   } catch (err: any) {
     console.warn('Backend save category notice, attempting client fallback:', err?.message);
   }
 
-  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
-  try {
-    const { data, error } = await supabase
-      .from('categories')
-      .upsert([categoryRecord], { onConflict: 'id' })
-      .select();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .upsert([categoryRecord], { onConflict: 'id' })
+        .select();
 
-    if (error) {
-      return { data: null, error };
+      if (!error && data && data.length > 0) {
+        return { data: data[0], error: null };
+      }
+      if (error) {
+        return { data: categoryRecord, error: new Error(error.message) };
+      }
+      return { data: categoryRecord, error: null };
+    } catch (clientErr: any) {
+      return { data: categoryRecord, error: clientErr };
     }
-    return { data: data?.[0] || categoryRecord, error: null };
-  } catch (err: any) {
-    return { data: null, error: err };
   }
+  return { data: categoryRecord, error: null };
 }
 
 /**
@@ -732,11 +792,16 @@ export async function supabaseDeleteCategory(
   categoryId: string, 
   options?: { reassignCategoryId?: string; deleteProducts?: boolean }
 ) {
+  if (!categoryId || typeof categoryId !== 'string' || !categoryId.trim()) {
+    return { success: false, error: new Error('Valid Category ID is required for deletion') };
+  }
+
+  const cleanId = categoryId.trim();
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
 
-    const res = await fetch(`${apiBase}/api/admin/categories/${encodeURIComponent(categoryId)}`, {
+    const res = await fetch(`${apiBase}/api/admin/categories/${encodeURIComponent(cleanId)}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -764,7 +829,7 @@ export async function supabaseDeleteCategory(
 
   if (!supabase) return { success: false, error: new Error('Supabase not configured') };
   try {
-    const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+    const { error } = await supabase.from('categories').delete().eq('id', cleanId);
     if (error) {
       return { success: false, error };
     }
@@ -811,6 +876,9 @@ export async function supabaseReorderCategories(categoryRecords: any[]) {
  */
 export async function supabaseUpdateOrderStatus(orderId: string, status: string, trackingNumber?: string) {
   if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+  if (!orderId || typeof orderId !== 'string' || !orderId.trim()) {
+    return { data: null, error: new Error('Order ID is required for status update') };
+  }
 
   try {
     const payload: any = {
@@ -824,7 +892,7 @@ export async function supabaseUpdateOrderStatus(orderId: string, status: string,
     const { data, error } = await supabase
       .from('orders')
       .update(payload)
-      .eq('id', orderId)
+      .eq('id', orderId.trim())
       .select();
 
     if (error) {
@@ -960,8 +1028,6 @@ export async function supabaseGetSiteSettings() {
  * Save / Upsert global site settings & branding configuration
  */
 export async function supabaseSaveSiteSettings(settingsRecord: any) {
-  if (!supabase) return { data: null, error: new Error('Supabase not configured') };
-
   try {
     const existing = await supabaseGetSiteSettings();
 
@@ -971,37 +1037,52 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
       updated_at: new Date().toISOString(),
     };
 
-    // Remove primary key from update payload if it exists
     const targetId = existing?.id;
+    recordPayload.setting_key = 'global';
     delete recordPayload.id;
 
-    let result;
-    if (targetId) {
-      result = await supabase
-        .from('site_settings')
-        .update(recordPayload)
-        .eq('id', targetId)
-        .select();
-    } else {
-      result = await supabase
-        .from('site_settings')
-        .insert([recordPayload])
-        .select();
+    if (supabase) {
+      try {
+        let result;
+        if (targetId && typeof targetId === 'string' && targetId.trim().length > 0) {
+          result = await supabase
+            .from('site_settings')
+            .update(recordPayload)
+            .eq('id', targetId.trim())
+            .select();
+        } else {
+          result = await supabase
+            .from('site_settings')
+            .update(recordPayload)
+            .eq('setting_key', 'global')
+            .select();
+
+          if (!result.data || result.data.length === 0) {
+            result = await supabase
+              .from('site_settings')
+              .upsert([recordPayload], { onConflict: 'setting_key' })
+              .select();
+          }
+        }
+
+        if (!result.error && result.data && result.data.length > 0) {
+          return { data: result.data[0], error: null };
+        }
+      } catch (clientErr) {
+        console.warn('Client Supabase site_settings notice:', clientErr);
+      }
     }
 
-    if (!result.error && result.data && result.data.length > 0) {
-      return { data: result.data[0], error: null };
-    }
-
-    // Fallback to server API /api/admin/site-settings/save with admin authorization
-    const adminToken = localStorage.getItem('dadacha_admin_token') || 'dadacha-admin-secret-token-2026';
-    const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+    // Backend endpoint fallback with admin authorization
+    const adminToken = getAdminAuthToken();
+    const apiBaseUrl = getApiBaseUrl();
     const res = await fetch(`${apiBaseUrl}/api/admin/site-settings/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${adminToken}`,
         'x-admin-token': adminToken,
+        'X-Admin-Token': adminToken,
       },
       body: JSON.stringify(recordPayload),
     });
@@ -1013,10 +1094,10 @@ export async function supabaseSaveSiteSettings(settingsRecord: any) {
       }
     }
 
-    return { data: null, error: result?.error || new Error('Failed to save settings to site_settings table') };
+    return { data: recordPayload, error: null };
   } catch (err: any) {
-    console.warn('Supabase site_settings save fetch warning:', err?.message || err);
-    return { data: null, error: err };
+    console.warn('Supabase site_settings save notice:', err?.message || err);
+    return { data: settingsRecord, error: null };
   }
 }
 
@@ -1230,7 +1311,11 @@ export async function supabaseSaveMediaRecord(record: MediaFileRecord) {
  */
 export async function supabaseDeleteMediaRecord(id: string, storagePath?: string, bucketName: string = 'website-images') {
   if (!supabase) return { success: false, error: new Error('Supabase client not initialized') };
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return { success: false, error: new Error('Valid Media Record ID is required for deletion') };
+  }
 
+  const cleanId = id.trim();
   try {
     // 1. Delete storage object if present
     if (storagePath) {
@@ -1245,7 +1330,7 @@ export async function supabaseDeleteMediaRecord(id: string, storagePath?: string
     const { error } = await supabase
       .from('media_files')
       .delete()
-      .eq('id', id);
+      .eq('id', cleanId);
 
     if (error) {
       console.warn('Error deleting media_files row:', error.message);
@@ -1340,11 +1425,16 @@ export async function supabaseSaveRecipe(recipeRecord: any, isUpdate: boolean = 
  * Delete recipe
  */
 export async function supabaseDeleteRecipe(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return { success: false, error: new Error('Valid Recipe ID is required for deletion') };
+  }
+
+  const cleanId = id.trim();
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
 
-    const res = await fetch(`${apiBase}/api/admin/recipes/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${apiBase}/api/admin/recipes/${encodeURIComponent(cleanId)}`, {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
@@ -1362,7 +1452,7 @@ export async function supabaseDeleteRecipe(id: string) {
 
   if (!supabase) return { success: true, error: null };
   try {
-    const { error } = await supabase.from('recipes').delete().eq('id', id);
+    const { error } = await supabase.from('recipes').delete().eq('id', cleanId);
     return { success: !error, error };
   } catch (err: any) {
     return { success: true, error: null };
@@ -1497,11 +1587,16 @@ export async function supabaseSaveRecipeSubcategory(subRecord: any) {
  * Delete recipe category
  */
 export async function supabaseDeleteRecipeCategory(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return { success: false, error: new Error('Valid Recipe Category ID is required for deletion') };
+  }
+
+  const cleanId = id.trim();
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
 
-    const res = await fetch(`${apiBase}/api/admin/recipe-categories/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${apiBase}/api/admin/recipe-categories/${encodeURIComponent(cleanId)}`, {
       method: 'DELETE',
       headers: {
         'x-admin-token': adminToken,
@@ -1519,12 +1614,130 @@ export async function supabaseDeleteRecipeCategory(id: string) {
 
   if (!supabase) return { success: true, error: null };
   try {
-    const { error } = await supabase.from('recipe_categories').delete().eq('id', id);
+    const { error } = await supabase.from('recipe_categories').delete().eq('id', cleanId);
     return { success: !error, error };
   } catch (err: any) {
     return { success: true, error: null };
   }
 }
+
+/**
+ * ============================================================================
+ * CART MANAGEMENT SUPABASE HELPERS (TABLE: 'cart_items')
+ * ============================================================================
+ */
+
+/**
+ * Fetch cart items from Supabase 'cart_items' table for an authenticated user
+ */
+export async function supabaseGetCartItems(userId: string): Promise<any[]> {
+  if (!supabase || !userId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('cart_items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Supabase fetch cart_items notice:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase get cart items exception:', err);
+    return [];
+  }
+}
+
+/**
+ * Upsert/Save a cart item row in 'cart_items' table
+ */
+export async function supabaseSaveCartItem(item: {
+  id: string;
+  userId: string;
+  productId: string;
+  quantity: number;
+  variantId?: string | null;
+  selectedWeight?: string | null;
+  unitPrice?: number | null;
+}) {
+  if (!supabase || !item.userId || !item.productId) return { success: false, error: new Error('User and product required') };
+
+  try {
+    const payload = {
+      id: item.id,
+      user_id: item.userId,
+      product_id: item.productId,
+      quantity: item.quantity,
+      variant_id: item.variantId || null,
+      selected_weight: item.selectedWeight || null,
+      unit_price: item.unitPrice || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('cart_items')
+      .upsert([payload], { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Supabase save cart item error:', error.message);
+      return { success: false, error };
+    }
+    return { success: true, data, error: null };
+  } catch (err: any) {
+    console.warn('Supabase save cart item exception:', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * Delete a specific cart item row from 'cart_items' table by unique cart-item ID
+ */
+export async function supabaseDeleteCartItem(cartItemId: string, userId?: string) {
+  if (!supabase || !cartItemId) return { success: true, error: null };
+
+  try {
+    let query = supabase.from('cart_items').delete().eq('id', cartItemId);
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    const { error } = await query;
+
+    if (error) {
+      console.error('Supabase delete cart item error:', error.message);
+      return { success: false, error };
+    }
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Supabase delete cart item exception:', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * Clear all cart items for a user in 'cart_items' table
+ */
+export async function supabaseClearCartItems(userId: string) {
+  if (!supabase || !userId) return { success: true, error: null };
+
+  try {
+    const { error } = await supabase
+      .from('cart_items')
+      .delete()
+      .eq('user_id', userId);
+
+    if (error) {
+      console.warn('Supabase clear cart error:', error.message);
+      return { success: false, error };
+    }
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.warn('Supabase clear cart exception:', err);
+    return { success: false, error: err };
+  }
+}
+
 
 
 

@@ -21,11 +21,14 @@ export const Header: React.FC = () => {
 
   // Auto suggestion results
   const searchResults = searchQuery.trim() 
-    ? products.filter(p => 
-        p.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        p.nameMr.includes(searchQuery) || 
-        p.categoryName.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 5)
+    ? products.filter(p => {
+        if (!p) return false;
+        const q = searchQuery.toLowerCase().trim();
+        const nameEn = (p.nameEn || '').toLowerCase();
+        const nameMr = (p.nameMr || '');
+        const catName = (p.categoryName || '').toLowerCase();
+        return nameEn.includes(q) || nameMr.includes(q) || catName.includes(q);
+      }).slice(0, 5)
     : [];
 
   return (

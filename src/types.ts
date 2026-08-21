@@ -119,6 +119,7 @@ export interface Review {
 }
 
 export interface CartItem {
+  id?: string;
   product: Product;
   quantity: number;
   selectedWeight?: string;

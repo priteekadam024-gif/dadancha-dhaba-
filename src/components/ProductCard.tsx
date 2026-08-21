@@ -9,7 +9,14 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { language, navigateTo, addToCart, wishlist, toggleWishlist } = useApp();
+  
+  if (!product) return null;
+
   const isWishlisted = wishlist.includes(product.id);
+  const primaryImage = product.images && product.images[0] 
+    ? product.images[0] 
+    : 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&q=80&w=800';
+  const secondaryImage = product.images && product.images[1] ? product.images[1] : null;
 
   return (
     <div className="group bg-[#161616] border border-zinc-800 hover:border-[#F4B400]/60 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-[#F4B400]/10 transition-all duration-300 flex flex-col relative">
@@ -19,17 +26,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         className="relative aspect-square overflow-hidden bg-[#0D0D0D] cursor-pointer"
       >
         <img
-          src={product.images[0]}
-          alt={product.nameEn}
+          src={primaryImage}
+          alt={product.nameEn || 'Product'}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
+          loading="lazy"
         />
 
         {/* Secondary image preview on hover if available */}
-        {product.images[1] && (
+        {secondaryImage && (
           <img
-            src={product.images[1]}
-            alt={product.nameEn}
+            src={secondaryImage}
+            alt={product.nameEn || 'Product'}
             className="w-full h-full object-cover absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            loading="lazy"
           />
         )}
 

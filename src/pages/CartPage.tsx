@@ -80,16 +80,17 @@ export const CartPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Cart Item List */}
         <div className="lg:col-span-8 space-y-4">
-          {cart.map((item, idx) => {
+          {cart.map((item) => {
             const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
-            const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight);
+            const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
             const itemOriginalPrice = item.selectedVariant?.originalPrice || item.product.originalPrice;
-            const variantKey = item.selectedVariant ? `${item.product.id}_${item.selectedVariant.id}` : (item.selectedWeight ? `${item.product.id}_${item.selectedWeight}` : `${item.product.id}_${idx}`);
+            const stableCartItemId = item.id || `cart_item_${item.product.id}_${item.selectedVariant?.id || item.selectedWeight || 'default'}`;
 
             return (
               <div
-                key={variantKey}
-                className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 shadow-lg"
+                key={stableCartItemId}
+                id={`cart-item-${stableCartItemId}`}
+                className="bg-[#161616] border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 shadow-lg transition-all"
               >
                 <img
                   src={item.product.images[0]}
@@ -113,8 +114,10 @@ export const CartPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center bg-[#1F1F1F] border border-zinc-700 rounded-xl p-1">
                     <button
-                      onClick={() => updateCartQuantity(item.product.id, item.quantity - 1, item.selectedVariant?.id || item.selectedWeight)}
-                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
+                      id={`qty-decrease-${stableCartItemId}`}
+                      onClick={() => updateCartQuantity(stableCartItemId, item.quantity - 1)}
+                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs transition-colors"
+                      title="Decrease quantity"
                     >
                       -
                     </button>
@@ -122,16 +125,19 @@ export const CartPage: React.FC = () => {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => updateCartQuantity(item.product.id, item.quantity + 1, item.selectedVariant?.id || item.selectedWeight)}
-                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs"
+                      id={`qty-increase-${stableCartItemId}`}
+                      onClick={() => updateCartQuantity(stableCartItemId, item.quantity + 1)}
+                      className="w-7 h-7 text-white font-bold hover:bg-zinc-800 rounded flex items-center justify-center text-xs transition-colors"
+                      title="Increase quantity"
                     >
                       +
                     </button>
                   </div>
 
                   <button
-                    onClick={() => removeFromCart(item.product.id, item.selectedVariant?.id || item.selectedWeight)}
-                    className="p-2 text-zinc-500 hover:text-rose-400 transition-colors"
+                    id={`cart-item-remove-${stableCartItemId}`}
+                    onClick={() => removeFromCart(stableCartItemId)}
+                    className="p-2 text-zinc-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10"
                     title="Remove item"
                   >
                     <Trash2 className="w-4 h-4" />

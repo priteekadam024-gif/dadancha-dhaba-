@@ -53,7 +53,11 @@ export const RecipeDetailPage: React.FC = () => {
   const currentImage = images[selectedImageIndex] || images[0];
 
   // Related product from store
-  const relatedProduct = products.find((p) => p.id === recipe.relatedProductId || p.nameEn.toLowerCase().includes('kanda') || p.nameEn.toLowerCase().includes('masala')) || products[0];
+  const relatedProduct = products.find((p) => 
+    p && (p.id === recipe.relatedProductId || 
+    (p.nameEn && p.nameEn.toLowerCase().includes('kanda')) || 
+    (p.nameEn && p.nameEn.toLowerCase().includes('masala')))
+  ) || products[0];
 
   // Ingredients and Steps depending on language or toggle
   const ingredients = (activeLang === 'mr' && recipe.ingredientsMr && recipe.ingredientsMr.length > 0)
