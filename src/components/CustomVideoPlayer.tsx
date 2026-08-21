@@ -160,6 +160,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <iframe
             src={embedUrl}
             title={title}
+            loading="lazy"
             className="w-full h-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -178,6 +179,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
           <iframe
             src={cleanInstaUrl}
             title={title}
+            loading="lazy"
             className="w-full h-full border-0"
             allowTransparency
           />
@@ -210,6 +212,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
         ref={videoRef}
         src={src}
         poster={poster}
+        preload="none"
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleVideoEnded}
         onClick={togglePlay}

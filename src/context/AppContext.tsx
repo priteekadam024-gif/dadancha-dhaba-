@@ -331,21 +331,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Helper to read initial cached data from sessionStorage for instant first paint
+  const getInitialCache = <T,>(key: string, fallback: T): T => {
+    try {
+      const cached = sessionStorage.getItem(key);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return fallback;
+  };
+
   // ALL BUSINESS DATA READ DIRECTLY FROM SUPABASE - NO HARDCODED DEMO DATA
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => getInitialCache('dd_cached_products', []));
+  const [categories, setCategories] = useState<Category[]>(() => getInitialCache('dd_cached_categories', []));
+  const [videos, setVideos] = useState<VideoItem[]>(() => getInitialCache('dd_cached_videos', []));
   const [latestVideosLimit, setLatestVideosLimit] = useState<number>(2);
-  const [gallery, setGallery] = useState<GalleryItem[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [gallery, setGallery] = useState<GalleryItem[]>(() => getInitialCache('dd_cached_gallery', []));
+  const [reviews, setReviews] = useState<Review[]>(() => getInitialCache('dd_cached_reviews', []));
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => getInitialCache('dd_cached_recipes', []));
+  const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>(() => getInitialCache('dd_cached_recipe_categories', []));
   const [orders, setOrders] = useState<Order[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
-  // Loading and Error state
-  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  // Loading and Error state - if cached products exist, do not block the screen!
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(() => {
+    try {
+      return !sessionStorage.getItem('dd_cached_products');
+    } catch {
+      return true;
+    }
+  });
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Cart & Wishlist
@@ -391,6 +406,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
   }, [wishlist]);
 
+  // Sync products & categories to sessionStorage for immediate warm startup
+  useEffect(() => {
+    if (products.length > 0) {
+      try {
+        sessionStorage.setItem('dd_cached_products', JSON.stringify(products));
+      } catch (e) {}
+    }
+  }, [products]);
+
+  useEffect(() => {
+    if (categories.length > 0) {
+      try {
+        sessionStorage.setItem('dd_cached_categories', JSON.stringify(categories));
+      } catch (e) {}
+    }
+  }, [categories]);
+
   // Current Auth User State (Default null, loaded via Supabase Auth session)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
@@ -419,10 +451,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
-   * Fetch all records directly from Supabase
+   * Fetch all records directly from Supabase with Tiered Progressive Loading
    */
   const fetchDatabaseData = async () => {
-    setIsLoadingData(true);
+    if (products.length === 0) {
+      setIsLoadingData(true);
+    }
     setFetchError(null);
 
     try {
@@ -431,34 +465,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // Execute all Supabase queries concurrently so no single query blocks or halts the others
-      const [
-        prodsRes,
-        catsRes,
-        ordersRes,
-        profilesRes,
-        mediaRes,
-        reviewsRes,
-        recipesRes,
-        recipeCatsRes,
-        settingsRes,
-      ] = await Promise.allSettled([
+      // TIER 1: Critical essentials (Products, Categories, Site Settings)
+      const [prodsRes, catsRes, settingsRes] = await Promise.allSettled([
         supabaseGetProducts(),
         supabaseGetCategories(),
-        supabaseGetOrders(),
-        supabaseGetAllProfiles(),
-        supabaseGetMediaFiles(),
-        supabaseGetReviews(),
-        supabaseGetRecipes(),
-        supabaseGetRecipeCategories(),
         supabaseGetSiteSettings(),
       ]);
 
       // 1. Process Products
       let mappedProducts: Product[] = [];
-      if (prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value)) {
+      if (prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value) && prodsRes.value.length > 0) {
         mappedProducts = prodsRes.value.map(mapDbProductToFrontend);
         setProducts(mappedProducts);
+        try { sessionStorage.setItem('dd_cached_products', JSON.stringify(mappedProducts)); } catch (e) {}
       } else if (prodsRes.status === 'rejected') {
         console.warn('Products fetch rejected:', prodsRes.reason);
       }
@@ -467,69 +486,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value)) {
         const mappedCategories = catsRes.value.map(mapDbCategoryToFrontend).map((cat) => ({
           ...cat,
-          itemCount: getCategoryProductCount(cat, mappedProducts),
+          itemCount: getCategoryProductCount(cat, mappedProducts.length > 0 ? mappedProducts : products),
         }));
         setCategories(mappedCategories);
+        try { sessionStorage.setItem('dd_cached_categories', JSON.stringify(mappedCategories)); } catch (e) {}
       }
 
-      // 3. Process Orders
-      if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
-        const mappedOrders = ordersRes.value.map(mapDbOrderToFrontend);
-        setOrders(mappedOrders);
-      }
-
-      // 4. Process User Profiles
-      if (profilesRes.status === 'fulfilled' && Array.isArray(profilesRes.value)) {
-        const mappedUsers = profilesRes.value.map(mapDbProfileToUser);
-        setAllUsers(mappedUsers);
-      }
-
-      // 5. Process Media (Videos & Gallery)
-      if (mediaRes.status === 'fulfilled' && Array.isArray(mediaRes.value)) {
-        const mappedVideos = mediaRes.value
-          .filter((m: any) => ['video', 'reels', 'youtube', 'instagram', 'post', 'image'].includes(m.media_type))
-          .map(mapDbMediaToVideo)
-          .sort((a, b) => {
-            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeB - timeA;
-          });
-        setVideos(mappedVideos);
-
-        const mappedGallery = mediaRes.value
-          .filter((m: any) => m.media_type === 'image' || m.media_type === 'banner')
-          .map(mapDbMediaToGallery);
-        setGallery(mappedGallery);
-      }
-
-      // 6. Process Reviews
-      if (reviewsRes.status === 'fulfilled' && Array.isArray(reviewsRes.value)) {
-        const mappedReviews = reviewsRes.value.map((r: any) => ({
-          id: String(r.id || 'rev-' + Math.random()),
-          productId: r.product_id || '',
-          userId: r.user_id || undefined,
-          userName: r.user_name || 'Customer',
-          rating: Number(r.rating) || 5,
-          comment: r.comment || '',
-          date: r.date ? r.date.split('T')[0] : new Date().toISOString().split('T')[0],
-          verifiedPurchase: true,
-          likes: Number(r.likes) || 0,
-        }));
-        setReviews(mappedReviews);
-      }
-
-      // 7. Process Written Recipes & Categories
-      if (recipesRes.status === 'fulfilled' && Array.isArray(recipesRes.value)) {
-        const mappedRecipes = recipesRes.value.map(mapDbRecipeToFrontend);
-        setRecipes(mappedRecipes);
-      }
-
-      if (recipeCatsRes.status === 'fulfilled' && Array.isArray(recipeCatsRes.value)) {
-        const mappedRecipeCategories = recipeCatsRes.value.map(mapDbRecipeCategoryToFrontend);
-        setRecipeCategories(mappedRecipeCategories);
-      }
-
-      // 8. Process Site Settings
+      // 3. Process Site Settings
       if (settingsRes.status === 'fulfilled' && settingsRes.value) {
         const siteSettings = settingsRes.value;
         if (siteSettings.latest_videos_count !== undefined) {
@@ -546,6 +509,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           youtubeUrl: siteSettings.youtube_url || 'https://youtube.com/@dadanchadhaba?si=3KnepBsTXtH6-Opz',
           facebookUrl: siteSettings.facebook_url || 'https://www.facebook.com/share/199iUku8xx/',
           logo_url: siteSettings.logo_url || 'https://rkzmsyqxyjpaqiomiaxf.supabase.co/storage/v1/object/public/site-assets/dadanchadhabalogo.png',
+        });
+      }
+
+      // Unblock UI immediately after Tier 1 essentials are ready!
+      setIsLoadingData(false);
+
+      // TIER 2: Secondary background enrichment (Media, Recipes, Reviews)
+      Promise.allSettled([
+        supabaseGetMediaFiles(),
+        supabaseGetReviews(),
+        supabaseGetRecipes(),
+        supabaseGetRecipeCategories(),
+      ]).then(([mediaRes, reviewsRes, recipesRes, recipeCatsRes]) => {
+        // Media (Videos & Gallery)
+        if (mediaRes.status === 'fulfilled' && Array.isArray(mediaRes.value)) {
+          const mappedVideos = mediaRes.value
+            .filter((m: any) => ['video', 'reels', 'youtube', 'instagram', 'post', 'image'].includes(m.media_type))
+            .map(mapDbMediaToVideo)
+            .sort((a, b) => {
+              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return timeB - timeA;
+            });
+          setVideos(mappedVideos);
+          try { sessionStorage.setItem('dd_cached_videos', JSON.stringify(mappedVideos)); } catch (e) {}
+
+          const mappedGallery = mediaRes.value
+            .filter((m: any) => m.media_type === 'image' || m.media_type === 'banner')
+            .map(mapDbMediaToGallery);
+          setGallery(mappedGallery);
+          try { sessionStorage.setItem('dd_cached_gallery', JSON.stringify(mappedGallery)); } catch (e) {}
+        }
+
+        // Reviews
+        if (reviewsRes.status === 'fulfilled' && Array.isArray(reviewsRes.value)) {
+          const mappedReviews = reviewsRes.value.map((r: any) => ({
+            id: String(r.id || 'rev-' + Math.random()),
+            productId: r.product_id || '',
+            userId: r.user_id || undefined,
+            userName: r.user_name || 'Customer',
+            rating: Number(r.rating) || 5,
+            comment: r.comment || '',
+            date: r.date ? r.date.split('T')[0] : new Date().toISOString().split('T')[0],
+            verifiedPurchase: true,
+            likes: Number(r.likes) || 0,
+          }));
+          setReviews(mappedReviews);
+          try { sessionStorage.setItem('dd_cached_reviews', JSON.stringify(mappedReviews)); } catch (e) {}
+        }
+
+        // Recipes & Categories
+        if (recipesRes.status === 'fulfilled' && Array.isArray(recipesRes.value)) {
+          const mappedRecipes = recipesRes.value.map(mapDbRecipeToFrontend);
+          setRecipes(mappedRecipes);
+          try { sessionStorage.setItem('dd_cached_recipes', JSON.stringify(mappedRecipes)); } catch (e) {}
+        }
+
+        if (recipeCatsRes.status === 'fulfilled' && Array.isArray(recipeCatsRes.value)) {
+          const mappedRecipeCategories = recipeCatsRes.value.map(mapDbRecipeCategoryToFrontend);
+          setRecipeCategories(mappedRecipeCategories);
+          try { sessionStorage.setItem('dd_cached_recipe_categories', JSON.stringify(mappedRecipeCategories)); } catch (e) {}
+        }
+      }).catch((secondaryErr) => {
+        console.warn('Secondary data load notice:', secondaryErr);
+      });
+
+      // TIER 3: Admin data (Orders & All Users) loaded only if admin is logged in
+      if (isAdminLoggedIn) {
+        Promise.allSettled([supabaseGetOrders(), supabaseGetAllProfiles()]).then(([ordersRes, profilesRes]) => {
+          if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
+            setOrders(ordersRes.value.map(mapDbOrderToFrontend));
+          }
+          if (profilesRes.status === 'fulfilled' && Array.isArray(profilesRes.value)) {
+            setAllUsers(profilesRes.value.map(mapDbProfileToUser));
+          }
         });
       }
     } catch (err: any) {

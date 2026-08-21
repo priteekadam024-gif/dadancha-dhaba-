@@ -101,7 +101,7 @@ export const LatestReelsSection: React.FC = () => {
                       poster={video.thumbnailUrl}
                       title={language === 'mr' ? video.titleMr : video.titleEn}
                       type={video.type}
-                      autoPlay={idx === 0} // Autoplay first video muted
+                      autoPlay={false}
                     />
 
                     {/* NEWEST BADGE FOR LATEST VIDEO */}

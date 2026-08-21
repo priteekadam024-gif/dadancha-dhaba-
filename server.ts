@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import multer from 'multer';
 import crypto from 'crypto';
+import compression from 'compression';
 import Razorpay from 'razorpay';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
@@ -242,6 +243,9 @@ const inMemoryRecipes: any[] = [
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Gzip / Deflate compression for all responses
+  app.use(compression());
 
   // Security Headers Middleware
   app.use((_req, res, next) => {
@@ -2126,11 +2130,22 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // Serve static files with 1 year cache for hashed assets and 1 hour for others
+    app.use(express.static(distPath, {
+      maxAge: '1h',
+      setHeaders: (res, filePath) => {
+        if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        }
+      },
+    }));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api/')) {
         return next();
       }
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

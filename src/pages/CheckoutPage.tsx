@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Address, PaymentMethod } from '../types';
 import { InvoiceModal } from '../components/InvoiceModal';
 import { mapDbOrderToFrontend } from '../utils/mappers';
+import { loadRazorpayScript } from '../utils/loadRazorpay';
 import confetti from 'canvas-confetti';
 import { 
   ShieldCheck, CreditCard, Smartphone, Banknote, 
@@ -14,6 +15,11 @@ export const CheckoutPage: React.FC = () => {
     language, cart, currentUser, createOrder, addOrUpdateOrder,
     appliedCoupon, navigateTo, showToast, contactConfig 
   } = useApp();
+
+  // Pre-load Razorpay script on checkout page mount so payment opens instantly when clicked
+  useEffect(() => {
+    loadRazorpayScript();
+  }, []);
 
   const cleanPhone = contactConfig.phone.replace(/[^0-9+]/g, '');
   const cleanWa = contactConfig.whatsapp.replace(/[^0-9]/g, '');
@@ -122,13 +128,10 @@ export const CheckoutPage: React.FC = () => {
 
         // 2. Ensure Razorpay SDK is loaded
         if (!(window as any).Razorpay) {
-          await new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error('Failed to load Razorpay Checkout script'));
-            document.body.appendChild(script);
-          });
+          const loaded = await loadRazorpayScript();
+          if (!loaded && !(window as any).Razorpay) {
+            throw new Error('Failed to load Razorpay Checkout script. Please check your internet connection.');
+          }
         }
 
         const activeKeyId = keyId || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || '';

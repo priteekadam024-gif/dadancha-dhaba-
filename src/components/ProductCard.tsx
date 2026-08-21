@@ -30,6 +30,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           alt={product.nameEn || 'Product'}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
           loading="lazy"
+          decoding="async"
         />
 
         {/* Secondary image preview on hover if available */}
@@ -39,6 +40,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             alt={product.nameEn || 'Product'}
             className="w-full h-full object-cover absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
             loading="lazy"
+            decoding="async"
           />
         )}
 

@@ -22,6 +22,46 @@ export const supabase = isSupabaseConfigured
     })
   : null;
 
+// In-flight request deduplication and memory cache (TTL: 15s)
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+const requestCache = new Map<string, CacheEntry<any>>();
+const inFlightRequests = new Map<string, Promise<any>>();
+
+export function getCachedOrFetch<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+  const cached = requestCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < ttlMs) {
+    return Promise.resolve(cached.data);
+  }
+
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key)!;
+  }
+
+  const promise = fetcher()
+    .then((result) => {
+      if (result && (!Array.isArray(result) || result.length > 0)) {
+        requestCache.set(key, { data: result, timestamp: Date.now() });
+      }
+      inFlightRequests.delete(key);
+      return result;
+    })
+    .catch((err) => {
+      inFlightRequests.delete(key);
+      throw err;
+    });
+
+  inFlightRequests.set(key, promise);
+  return promise;
+}
+
+export function invalidateCacheKey(key: string) {
+  requestCache.delete(key);
+}
+
 /**
  * Register a new user with Supabase Auth
  * Creates entry in auth.users and updates user_profiles table
@@ -538,55 +578,58 @@ async function fetchProductsInChunks(client: any): Promise<any[]> {
  * Directly queries public.products table with select('*') and includes resilient chunking fallback
  */
 export async function supabaseGetProducts() {
-  if (supabase) {
+  return getCachedOrFetch('products', 15000, async () => {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*');
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+
+        if (error) {
+          console.warn('Initial products select notice (trying chunked retrieval):', error.message);
+        }
+
+        // If select('*') encountered statement timeout (57014) or error, use chunked retrieval
+        const chunkedProducts = await fetchProductsInChunks(supabase);
+        if (chunkedProducts.length > 0) {
+          return chunkedProducts;
+        }
+      } catch (err) {
+        console.warn('Supabase get products client query exception, trying chunked retrieval:', err);
+        const chunkedProducts = await fetchProductsInChunks(supabase);
+        if (chunkedProducts.length > 0) {
+          return chunkedProducts;
+        }
+      }
+    }
+
+    // Fallback to Express backend endpoint if needed
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*');
-
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data;
-      }
-
-      if (error) {
-        console.warn('Initial products select notice (trying chunked retrieval):', error.message);
-      }
-
-      // If select('*') encountered statement timeout (57014) or error, use chunked retrieval
-      const chunkedProducts = await fetchProductsInChunks(supabase);
-      if (chunkedProducts.length > 0) {
-        return chunkedProducts;
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/products`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.products) && json.products.length > 0) {
+          return json.products;
+        }
       }
     } catch (err) {
-      console.warn('Supabase get products client query exception, trying chunked retrieval:', err);
-      const chunkedProducts = await fetchProductsInChunks(supabase);
-      if (chunkedProducts.length > 0) {
-        return chunkedProducts;
-      }
+      console.warn('Backend /api/products fetch fallback notice:', err);
     }
-  }
 
-  // Fallback to Express backend endpoint if needed
-  try {
-    const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/api/products`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && Array.isArray(json.products) && json.products.length > 0) {
-        return json.products;
-      }
-    }
-  } catch (err) {
-    console.warn('Backend /api/products fetch fallback notice:', err);
-  }
-
-  return [];
+    return [];
+  });
 }
 
 /**
  * Save or Upsert product to Supabase 'products' table via Express backend
  */
 export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean = false) {
+  invalidateCacheKey('products');
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
@@ -648,6 +691,7 @@ export async function supabaseSaveProduct(productRecord: any, isUpdate: boolean 
  * Delete product from Supabase 'products' table via Express backend
  */
 export async function supabaseDeleteProduct(productId: string) {
+  invalidateCacheKey('products');
   if (!productId || typeof productId !== 'string' || !productId.trim()) {
     return { success: false, error: new Error('Valid Product ID is required for deletion') };
   }
@@ -697,35 +741,37 @@ export async function supabaseDeleteProduct(productId: string) {
  * Fetch categories from Supabase 'categories' table
  */
 export async function supabaseGetCategories() {
-  try {
-    const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/api/categories`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && Array.isArray(json.categories)) {
-        return json.categories;
+  return getCachedOrFetch('categories', 15000, async () => {
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/categories`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.categories)) {
+          return json.categories;
+        }
       }
+    } catch (err) {
+      console.warn('Backend /api/categories fetch notice, falling back to client Supabase:', err);
     }
-  } catch (err) {
-    console.warn('Backend /api/categories fetch notice, falling back to client Supabase:', err);
-  }
 
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('display_order', { ascending: true });
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true });
 
-    if (error) {
-      console.warn('Error fetching categories from Supabase:', error.message);
+      if (error) {
+        console.warn('Error fetching categories from Supabase:', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Supabase get categories exception:', err);
       return [];
     }
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase get categories exception:', err);
-    return [];
-  }
+  });
 }
 
 /**
@@ -986,48 +1032,51 @@ export async function supabaseGetAllProfiles() {
  * Fetch global site settings & branding configuration
  */
 export async function supabaseGetSiteSettings() {
-  if (!supabase) return null;
+  return getCachedOrFetch('site_settings', 20000, async () => {
+    if (!supabase) return null;
 
-  try {
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (!error && data) {
-      return data;
-    }
-
-    if (error) {
-      console.warn('Direct Supabase fetch site_settings warning:', error.message);
-    }
-  } catch (err) {
-    console.warn('Direct Supabase site_settings fetch error:', err);
-  }
-
-  // Fallback to server API /api/site-settings
-  try {
-    const apiBaseUrl = import.meta.env.VITE_API_URL || '';
-    const res = await fetch(`${apiBaseUrl}/api/site-settings`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && json.settings) {
-        return json.settings;
+      if (!error && data) {
+        return data;
       }
-    }
-  } catch (err) {
-    console.warn('API site-settings fetch error:', err);
-  }
 
-  return null;
+      if (error) {
+        console.warn('Direct Supabase fetch site_settings warning:', error.message);
+      }
+    } catch (err) {
+      console.warn('Direct Supabase site_settings fetch error:', err);
+    }
+
+    // Fallback to server API /api/site-settings
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBaseUrl}/api/site-settings`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.settings) {
+          return json.settings;
+        }
+      }
+    } catch (err) {
+      console.warn('API site-settings fetch error:', err);
+    }
+
+    return null;
+  });
 }
 
 /**
  * Save / Upsert global site settings & branding configuration
  */
 export async function supabaseSaveSiteSettings(settingsRecord: any) {
+  invalidateCacheKey('site_settings');
   try {
     const existing = await supabaseGetSiteSettings();
 
@@ -1238,29 +1287,32 @@ export async function supabaseUploadMediaStorageAsset(
  * Fetch media files list from public.media_files
  */
 export async function supabaseGetMediaFiles(): Promise<MediaFileRecord[]> {
-  if (!supabase) return [];
+  return getCachedOrFetch('media_files', 20000, async () => {
+    if (!supabase) return [];
 
-  try {
-    const { data, error } = await supabase
-      .from('media_files')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('media_files')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('Error fetching media_files from Supabase:', error.message);
+      if (error) {
+        console.warn('Error fetching media_files from Supabase:', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('Supabase media_files fetch exception:', err);
       return [];
     }
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase media_files fetch exception:', err);
-    return [];
-  }
+  });
 }
 
 /**
  * Save or Upsert a media record in public.media_files
  */
 export async function supabaseSaveMediaRecord(record: MediaFileRecord) {
+  invalidateCacheKey('media_files');
   if (!supabase) return { data: null, error: new Error('Supabase client not initialized') };
 
   try {
@@ -1332,6 +1384,8 @@ export async function supabaseDeleteMediaRecord(id: string, storagePath?: string
       .delete()
       .eq('id', cleanId);
 
+    invalidateCacheKey('media_files');
+
     if (error) {
       console.warn('Error deleting media_files row:', error.message);
       return { success: false, error };
@@ -1348,37 +1402,40 @@ export async function supabaseDeleteMediaRecord(id: string, storagePath?: string
  * Fetch recipes from backend/Supabase
  */
 export async function supabaseGetRecipes() {
-  try {
-    const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/api/recipes`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && Array.isArray(json.recipes)) {
-        return json.recipes;
+  return getCachedOrFetch('recipes', 20000, async () => {
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/recipes`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.recipes)) {
+          return json.recipes;
+        }
       }
+    } catch (err) {
+      console.warn('Backend /api/recipes notice:', err);
     }
-  } catch (err) {
-    console.warn('Backend /api/recipes notice:', err);
-  }
 
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from('recipes')
-      .select('*')
-      .order('created_at', { ascending: false });
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) return [];
-    return data || [];
-  } catch {
-    return [];
-  }
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
  * Save or update recipe
  */
 export async function supabaseSaveRecipe(recipeRecord: any, isUpdate: boolean = false) {
+  invalidateCacheKey('recipes');
   try {
     const apiBase = getApiBaseUrl();
     const adminToken = getAdminAuthToken();
@@ -1425,6 +1482,7 @@ export async function supabaseSaveRecipe(recipeRecord: any, isUpdate: boolean = 
  * Delete recipe
  */
 export async function supabaseDeleteRecipe(id: string) {
+  invalidateCacheKey('recipes');
   if (!id || typeof id !== 'string' || !id.trim()) {
     return { success: false, error: new Error('Valid Recipe ID is required for deletion') };
   }
@@ -1463,40 +1521,42 @@ export async function supabaseDeleteRecipe(id: string) {
  * Fetch recipe categories and their subcategories
  */
 export async function supabaseGetRecipeCategories() {
-  try {
-    const apiBase = getApiBaseUrl();
-    const res = await fetch(`${apiBase}/api/recipe-categories`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && Array.isArray(json.categories)) {
-        return json.categories;
+  return getCachedOrFetch('recipe_categories', 30000, async () => {
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/recipe-categories`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.categories)) {
+          return json.categories;
+        }
       }
+    } catch (err) {
+      console.warn('Backend recipe-categories notice:', err);
     }
-  } catch (err) {
-    console.warn('Backend recipe-categories notice:', err);
-  }
 
-  if (!supabase) return [];
-  try {
-    const { data: catData } = await supabase
-      .from('recipe_categories')
-      .select('*')
-      .order('display_order', { ascending: true });
+    if (!supabase) return [];
+    try {
+      const { data: catData } = await supabase
+        .from('recipe_categories')
+        .select('*')
+        .order('display_order', { ascending: true });
 
-    const { data: subData } = await supabase
-      .from('recipe_subcategories')
-      .select('*');
+      const { data: subData } = await supabase
+        .from('recipe_subcategories')
+        .select('*');
 
-    if (!catData) return [];
+      if (!catData) return [];
 
-    const subList = subData || [];
-    return catData.map((c: any) => ({
-      ...c,
-      subcategories: subList.filter((s: any) => s.category_id === c.id),
-    }));
-  } catch {
-    return [];
-  }
+      const subList = subData || [];
+      return catData.map((c: any) => ({
+        ...c,
+        subcategories: subList.filter((s: any) => s.category_id === c.id),
+      }));
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
