@@ -8,7 +8,7 @@ import {
   Upload, X, Check, Sparkles, Image as ImageIcon, Download, 
   CheckSquare, Square, AlertCircle, Tag, Package, Layers, 
   RotateCcw, ChevronLeft, ChevronRight, Star, Flame, Grid, List,
-  ArrowUp, ArrowDown, Scale
+  ArrowUp, ArrowDown, Scale, CreditCard, Receipt, Smartphone, Banknote
 } from 'lucide-react';
 
 export const AdminProductManager: React.FC = () => {
@@ -59,6 +59,17 @@ export const AdminProductManager: React.FC = () => {
   const [formImages, setFormImages] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Payment Methods and GST Settings State
+  const [formPaymentMethods, setFormPaymentMethods] = useState<string[]>([
+    'cod',
+    'bhim_upi',
+    'google_pay',
+    'phonepe',
+    'razorpay',
+  ]);
+  const [formGstEnabled, setFormGstEnabled] = useState<boolean>(true);
+  const [formGstRate, setFormGstRate] = useState<number>(5);
 
   // Pack Sizes / Weight Options State
   const [formVariants, setFormVariants] = useState<ProductVariant[]>([
@@ -194,6 +205,9 @@ export const AdminProductManager: React.FC = () => {
     setFormIngredientsMr('मिरची, धने, जिरे, लसूण, तीळ, सुके खोबरे, खडा मसाला.');
     setFormIsFeatured(true);
     setFormIsTrending(false);
+    setFormPaymentMethods(['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay']);
+    setFormGstEnabled(true);
+    setFormGstRate(5);
     setFormImages([
       'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=800'
     ]);
@@ -224,6 +238,13 @@ export const AdminProductManager: React.FC = () => {
     setFormIngredientsMr(product.ingredientsMr);
     setFormIsFeatured(!!product.isFeatured);
     setFormIsTrending(!!product.isTrending);
+    setFormPaymentMethods(
+      Array.isArray(product.paymentMethods) && product.paymentMethods.length > 0
+        ? [...product.paymentMethods]
+        : ['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay']
+    );
+    setFormGstEnabled(product.gstEnabled !== undefined ? Boolean(product.gstEnabled) : true);
+    setFormGstRate(product.gstRate !== undefined ? Number(product.gstRate) : 5);
     setFormImages(product.images.length > 0 ? [...product.images] : ['https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=800']);
     
     // Load existing variants or initialize from product weight and price
@@ -292,6 +313,19 @@ export const AdminProductManager: React.FC = () => {
       seenWeights.add(lowerWeight);
     }
 
+    // Validate Payment Methods
+    if (formPaymentMethods.length === 0) {
+      showToast('Please select at least one payment method for this product', 'error');
+      return;
+    }
+
+    // Validate GST Rate
+    const numericGstRate = Number(formGstRate);
+    if (formGstEnabled && (isNaN(numericGstRate) || numericGstRate < 0)) {
+      showToast('Please enter a valid GST rate percentage (e.g. 0, 5, 12, 18, 28)', 'error');
+      return;
+    }
+
     const categoryObj = categories.find((c) => c.id === formCategory);
     const categoryName = categoryObj ? categoryObj.nameEn : formCategory.toUpperCase();
 
@@ -328,6 +362,9 @@ export const AdminProductManager: React.FC = () => {
       isFeatured: formIsFeatured,
       isTrending: formIsTrending,
       isBestSeller: editingProduct ? editingProduct.isBestSeller : false,
+      paymentMethods: formPaymentMethods,
+      gstEnabled: formGstEnabled,
+      gstRate: formGstEnabled ? (isNaN(numericGstRate) ? 5 : Math.max(0, numericGstRate)) : 0,
       variants: formVariants.map((v) => ({
         id: v.id || `v-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         weight: (v.weight || v.size || '').trim(),
@@ -742,6 +779,13 @@ export const AdminProductManager: React.FC = () => {
                         <td className="py-4 px-4 space-y-1">
                           <span className="font-mono text-[10px] text-zinc-400 block">{p.sku}</span>
                           <div className="flex gap-1 flex-wrap">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                              p.gstEnabled !== false
+                                ? 'bg-blue-950/60 text-blue-300 border-blue-800/50'
+                                : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                            }`}>
+                              GST: {p.gstEnabled !== false ? `${p.gstRate ?? 5}%` : 'Exempt'}
+                            </span>
                             {p.isFeatured && (
                               <span className="bg-amber-400/10 text-amber-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-400/30">
                                 Featured
@@ -1203,7 +1247,7 @@ export const AdminProductManager: React.FC = () => {
               </div>
 
               {/* Product Badges Checkboxes */}
-              <div className="flex items-center gap-6 bg-[#1A1A1A] p-4 rounded-2xl border border-zinc-800">
+              <div className="flex flex-wrap items-center gap-6 bg-[#1A1A1A] p-4 rounded-2xl border border-zinc-800">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-200">
                   <input
                     type="checkbox"
@@ -1225,6 +1269,291 @@ export const AdminProductManager: React.FC = () => {
                   <Flame className="w-4 h-4 text-rose-500" />
                   <span>Trending Product (ट्रेंडिंग मध्ये जोडा)</span>
                 </label>
+              </div>
+
+              {/* PAYMENT METHODS SECTION */}
+              <div className="bg-[#181818] border border-zinc-800 p-5 rounded-2xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-[#F4B400]" />
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      Payment Methods (उपलब्ध पेमेंट पर्याय)
+                    </h4>
+                  </div>
+
+                  {/* Quick Select Preset Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFormPaymentMethods(['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay'])}
+                      className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      All Methods
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormPaymentMethods(['bhim_upi', 'google_pay', 'phonepe', 'razorpay'])}
+                      className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      Online Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormPaymentMethods(['cod'])}
+                      className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded font-semibold transition-colors"
+                    >
+                      COD Only
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-zinc-400">
+                  Select which payment methods are accepted for this specific product. At checkout, if multiple products are purchased together, only payment methods common to all items will be available.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {/* Cash on Delivery */}
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      formPaymentMethods.includes('cod')
+                        ? 'bg-emerald-950/20 border-emerald-600/50 text-white'
+                        : 'bg-[#121212] border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formPaymentMethods.includes('cod')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormPaymentMethods((prev) => Array.from(new Set([...prev, 'cod'])));
+                        } else {
+                          setFormPaymentMethods((prev) => prev.filter((m) => m !== 'cod'));
+                        }
+                      }}
+                      className="rounded accent-emerald-500 w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <Banknote className="w-3.5 h-3.5 text-emerald-400" />
+                        Cash on Delivery (COD)
+                      </span>
+                      <span className="text-[10px] text-zinc-400">Pay cash upon home delivery</span>
+                    </div>
+                  </label>
+
+                  {/* BHIM UPI */}
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      formPaymentMethods.includes('bhim_upi')
+                        ? 'bg-amber-950/20 border-amber-500/50 text-white'
+                        : 'bg-[#121212] border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formPaymentMethods.includes('bhim_upi')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormPaymentMethods((prev) => Array.from(new Set([...prev, 'bhim_upi'])));
+                        } else {
+                          setFormPaymentMethods((prev) => prev.filter((m) => m !== 'bhim_upi'));
+                        }
+                      }}
+                      className="rounded accent-[#F4B400] w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <Smartphone className="w-3.5 h-3.5 text-[#F4B400]" />
+                        BHIM UPI
+                      </span>
+                      <span className="text-[10px] text-zinc-400">Direct BHIM UPI payments</span>
+                    </div>
+                  </label>
+
+                  {/* Google Pay */}
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      formPaymentMethods.includes('google_pay')
+                        ? 'bg-blue-950/20 border-blue-500/50 text-white'
+                        : 'bg-[#121212] border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formPaymentMethods.includes('google_pay')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormPaymentMethods((prev) => Array.from(new Set([...prev, 'google_pay'])));
+                        } else {
+                          setFormPaymentMethods((prev) => prev.filter((m) => m !== 'google_pay'));
+                        }
+                      }}
+                      className="rounded accent-blue-500 w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+                        Google Pay
+                      </span>
+                      <span className="text-[10px] text-zinc-400">GPay UPI checkout</span>
+                    </div>
+                  </label>
+
+                  {/* PhonePe */}
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      formPaymentMethods.includes('phonepe')
+                        ? 'bg-purple-950/20 border-purple-500/50 text-white'
+                        : 'bg-[#121212] border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formPaymentMethods.includes('phonepe')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormPaymentMethods((prev) => Array.from(new Set([...prev, 'phonepe'])));
+                        } else {
+                          setFormPaymentMethods((prev) => prev.filter((m) => m !== 'phonepe'));
+                        }
+                      }}
+                      className="rounded accent-purple-500 w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <Smartphone className="w-3.5 h-3.5 text-purple-400" />
+                        PhonePe
+                      </span>
+                      <span className="text-[10px] text-zinc-400">PhonePe UPI checkout</span>
+                    </div>
+                  </label>
+
+                  {/* Razorpay */}
+                  <label
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                      formPaymentMethods.includes('razorpay')
+                        ? 'bg-amber-950/20 border-amber-500/50 text-white'
+                        : 'bg-[#121212] border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formPaymentMethods.includes('razorpay')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormPaymentMethods((prev) => Array.from(new Set([...prev, 'razorpay'])));
+                        } else {
+                          setFormPaymentMethods((prev) => prev.filter((m) => m !== 'razorpay'));
+                        }
+                      }}
+                      className="rounded accent-[#F4B400] w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-xs font-bold block flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-[#F4B400]" />
+                        Razorpay
+                      </span>
+                      <span className="text-[10px] text-zinc-400">Cards, Netbanking & Wallets</span>
+                    </div>
+                  </label>
+                </div>
+
+                {formPaymentMethods.length === 0 && (
+                  <p className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Warning: You must select at least one payment method so customers can buy this product.
+                  </p>
+                )}
+              </div>
+
+              {/* GST SETTINGS SECTION */}
+              <div className="bg-[#181818] border border-zinc-800 p-5 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+                  <Receipt className="w-4 h-4 text-[#F4B400]" />
+                  <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                    GST Settings (जीएसटी कर दर)
+                  </h4>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Enable / Disable GST Checkbox */}
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formGstEnabled}
+                      onChange={(e) => setFormGstEnabled(e.target.checked)}
+                      className="rounded accent-[#F4B400] w-4 h-4"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Apply GST to this product
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {formGstEnabled ? 'Tax is calculated at checkout based on configured rate' : 'Product is tax-exempt (0% GST)'}
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* GST Rate Input */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-zinc-300 whitespace-nowrap">
+                      GST Rate (%):
+                    </label>
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        disabled={!formGstEnabled}
+                        value={formGstEnabled ? formGstRate : 0}
+                        onChange={(e) => setFormGstRate(Number(e.target.value))}
+                        className={`w-full bg-[#111111] text-white text-xs font-bold px-3 py-2 rounded-xl border ${
+                          formGstEnabled ? 'border-zinc-700 focus:border-[#F4B400]' : 'border-zinc-800 opacity-50 cursor-not-allowed'
+                        }`}
+                      />
+                      <span className="absolute right-2.5 top-2 text-xs font-bold text-zinc-500 pointer-events-none">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Common Presets */}
+                {formGstEnabled && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-zinc-400 mr-1">Quick Presets:</span>
+                    {[0, 5, 12, 18, 28].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setFormGstRate(rate)}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition-all ${
+                          Number(formGstRate) === rate
+                            ? 'bg-[#F4B400] text-[#111111]'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                        }`}
+                      >
+                        {rate}% {rate === 5 ? '(Spices Standard)' : rate === 0 ? '(Exempt)' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Calculation preview hint */}
+                <div className="bg-[#121212] p-3 rounded-xl border border-zinc-800/80 text-[11px] text-zinc-400">
+                  {formGstEnabled ? (
+                    <span>
+                      💡 <strong>Calculation Preview:</strong> For a pack priced at ₹{formVariants[0]?.price || formPrice}, GST @ {formGstRate}% will be{' '}
+                      <strong className="text-[#F4B400]">
+                        ₹{(((Number(formVariants[0]?.price || formPrice) || 0) * (Number(formGstRate) || 0)) / 100).toFixed(2)}
+                      </strong>{' '}
+                      per unit.
+                    </span>
+                  ) : (
+                    <span>
+                      💡 <strong>Tax Exempt:</strong> No GST will be charged for this item during checkout.
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* IMAGE UPLOADER & MULTI-IMAGE GALLERY */}

@@ -4,10 +4,17 @@ import { Address, PaymentMethod } from '../types';
 import { InvoiceModal } from '../components/InvoiceModal';
 import { mapDbOrderToFrontend } from '../utils/mappers';
 import { loadRazorpayScript } from '../utils/loadRazorpay';
+import { 
+  calculateOrderTotals, 
+  getCartItemUnitPrice, 
+  getCartItemLineTotal, 
+  formatAmount,
+  getAllowedPaymentMethods 
+} from '../utils/cartCalculations';
 import confetti from 'canvas-confetti';
 import { 
   ShieldCheck, CreditCard, Smartphone, Banknote, 
-  MapPin, CheckCircle, Lock, ArrowLeft, Loader2
+  MapPin, CheckCircle, Lock, ArrowLeft, Loader2, AlertCircle
 } from 'lucide-react';
 
 export const CheckoutPage: React.FC = () => {
@@ -43,19 +50,32 @@ export const CheckoutPage: React.FC = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Trusted client display calculation (matches backend exact calculation)
-  const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
-  let discountAmount = 0;
-  if (appliedCoupon) {
-    if (appliedCoupon.discountType === 'percentage') {
-      discountAmount = Math.round((subtotal * appliedCoupon.value) / 100);
-    } else {
-      discountAmount = appliedCoupon.value;
+  // Allowed payment options based on product-level configurations in cart
+  const allowedPayments = getAllowedPaymentMethods(cart);
+
+  // Ensure current paymentMethod conforms to allowed payment options
+  useEffect(() => {
+    if (paymentMethod === 'upi' && !allowedPayments.allowUpi) {
+      if (allowedPayments.allowRazorpay) setPaymentMethod('razorpay');
+      else if (allowedPayments.allowCod) setPaymentMethod('cod');
+    } else if (paymentMethod === 'razorpay' && !allowedPayments.allowRazorpay) {
+      if (allowedPayments.allowUpi) setPaymentMethod('upi');
+      else if (allowedPayments.allowCod) setPaymentMethod('cod');
+    } else if (paymentMethod === 'cod' && !allowedPayments.allowCod) {
+      if (allowedPayments.allowUpi) setPaymentMethod('upi');
+      else if (allowedPayments.allowRazorpay) setPaymentMethod('razorpay');
     }
-  }
-  const shippingFee = subtotal > 499 || cart.length === 0 ? 0 : 50;
-  const gstAmount = 0; // Included in price
-  const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+  }, [allowedPayments, paymentMethod]);
+
+  // Trusted client display calculation (single source of truth matching backend exact calculation)
+  const {
+    subtotal,
+    discountAmount,
+    shippingFee,
+    gstAmount,
+    grandTotal,
+    gstRatesSummary,
+  } = calculateOrderTotals(cart, appliedCoupon);
 
   const getApiUrl = (endpoint: string) => {
     const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL;
@@ -91,9 +111,10 @@ export const CheckoutPage: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: cart.map((item) => {
-              const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+              const itemPrice = getCartItemUnitPrice(item);
               const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
               const sizeLabel = item.selectedVariant ? ` (${item.selectedVariant.weight || item.selectedVariant.size})` : (item.selectedWeight ? ` (${item.selectedWeight})` : '');
+              const lineTotal = getCartItemLineTotal(item);
               return {
                 productId: item.product.id,
                 quantity: item.quantity,
@@ -106,7 +127,7 @@ export const CheckoutPage: React.FC = () => {
                 selectedVariantId: item.selectedVariant?.id,
                 selectedVariantSize: itemWeight,
                 unitPrice: itemPrice,
-                lineTotal: itemPrice * item.quantity,
+                lineTotal,
               };
             }),
             couponCode: appliedCoupon?.code,
@@ -378,52 +399,87 @@ export const CheckoutPage: React.FC = () => {
               <span>{language === 'mr' ? '२. पेमेंट पर्याय निवडा' : '2. Select Payment Method'}</span>
             </h3>
 
+            {!allowedPayments.isCompatible && (
+              <div className="p-3.5 bg-rose-950/40 border border-rose-800/80 rounded-2xl text-xs text-rose-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
+                <p>
+                  {language === 'mr'
+                    ? 'तुमच्या कार्टमधील उत्पादनांमध्ये पेमेंट पर्यायांचा मेळ लागत नाही. कृपया कार्ट तपासा.'
+                    : 'The items in your cart have conflicting payment options. No single payment method supports all items in this cart.'}
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* BHIM UPI */}
               <div
-                onClick={() => setPaymentMethod('upi')}
-                className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${
-                  paymentMethod === 'upi'
-                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg'
-                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                onClick={() => {
+                  if (allowedPayments.allowUpi) setPaymentMethod('upi');
+                }}
+                className={`p-4 rounded-2xl border transition-all ${
+                  !allowedPayments.allowUpi
+                    ? 'opacity-40 bg-[#0d0d0d] border-zinc-800 cursor-not-allowed text-zinc-600'
+                    : paymentMethod === 'upi'
+                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg cursor-pointer'
+                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700 cursor-pointer'
                 }`}
               >
-                <Smartphone className="w-6 h-6 text-[#F4B400]" />
-                <div>
-                  <h4 className="font-bold text-xs text-white">BHIM UPI / Google Pay / PhonePe</h4>
-                  <p className="text-[10px] text-zinc-400">Instant 1-Click Payment</p>
+                <div className="flex items-center gap-3">
+                  <Smartphone className={`w-6 h-6 ${allowedPayments.allowUpi ? 'text-[#F4B400]' : 'text-zinc-600'}`} />
+                  <div>
+                    <h4 className="font-bold text-xs text-white">BHIM UPI / Google Pay / PhonePe</h4>
+                    <p className="text-[10px] text-zinc-400">
+                      {allowedPayments.allowUpi ? 'Instant 1-Click Payment' : 'Not available for some cart items'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Razorpay */}
               <div
-                onClick={() => setPaymentMethod('razorpay')}
-                className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${
-                  paymentMethod === 'razorpay'
-                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg'
-                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                onClick={() => {
+                  if (allowedPayments.allowRazorpay) setPaymentMethod('razorpay');
+                }}
+                className={`p-4 rounded-2xl border transition-all ${
+                  !allowedPayments.allowRazorpay
+                    ? 'opacity-40 bg-[#0d0d0d] border-zinc-800 cursor-not-allowed text-zinc-600'
+                    : paymentMethod === 'razorpay'
+                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg cursor-pointer'
+                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700 cursor-pointer'
                 }`}
               >
-                <CreditCard className="w-6 h-6 text-[#F4B400]" />
-                <div>
-                  <h4 className="font-bold text-xs text-white">Razorpay (Cards / Netbanking)</h4>
-                  <p className="text-[10px] text-zinc-400">All Indian Banks Supported</p>
+                <div className="flex items-center gap-3">
+                  <CreditCard className={`w-6 h-6 ${allowedPayments.allowRazorpay ? 'text-[#F4B400]' : 'text-zinc-600'}`} />
+                  <div>
+                    <h4 className="font-bold text-xs text-white">Razorpay (Cards / Netbanking)</h4>
+                    <p className="text-[10px] text-zinc-400">
+                      {allowedPayments.allowRazorpay ? 'All Indian Banks Supported' : 'Not available for some cart items'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Cash On Delivery */}
               <div
-                onClick={() => setPaymentMethod('cod')}
-                className={`p-4 rounded-2xl border cursor-pointer flex items-center gap-3 transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg'
-                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                onClick={() => {
+                  if (allowedPayments.allowCod) setPaymentMethod('cod');
+                }}
+                className={`p-4 rounded-2xl border transition-all ${
+                  !allowedPayments.allowCod
+                    ? 'opacity-40 bg-[#0d0d0d] border-zinc-800 cursor-not-allowed text-zinc-600'
+                    : paymentMethod === 'cod'
+                    ? 'bg-[#1F1600] border-[#F4B400] text-white shadow-lg cursor-pointer'
+                    : 'bg-[#111111] border-zinc-800 text-zinc-400 hover:border-zinc-700 cursor-pointer'
                 }`}
               >
-                <Banknote className="w-6 h-6 text-emerald-400" />
-                <div>
-                  <h4 className="font-bold text-xs text-white">Cash on Delivery (COD)</h4>
-                  <p className="text-[10px] text-zinc-400">Pay cash upon home delivery</p>
+                <div className="flex items-center gap-3">
+                  <Banknote className={`w-6 h-6 ${allowedPayments.allowCod ? 'text-emerald-400' : 'text-zinc-600'}`} />
+                  <div>
+                    <h4 className="font-bold text-xs text-white">Cash on Delivery (COD)</h4>
+                    <p className="text-[10px] text-zinc-400">
+                      {allowedPayments.allowCod ? 'Pay cash upon home delivery' : 'Not available for some cart items'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -439,8 +495,9 @@ export const CheckoutPage: React.FC = () => {
 
             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
               {cart.map((item) => {
-                const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+                const itemPrice = getCartItemUnitPrice(item);
                 const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
+                const lineTotal = getCartItemLineTotal(item);
                 const stableKey = item.id || `cart_item_${item.product.id}_${item.selectedVariant?.id || item.selectedWeight || 'default'}`;
 
                 return (
@@ -450,9 +507,12 @@ export const CheckoutPage: React.FC = () => {
                       <p className="font-semibold text-white truncate font-marathi">
                         {language === 'mr' ? item.product.nameMr : item.product.nameEn}
                       </p>
-                      <p className="text-zinc-500 text-[11px]">{itemWeight} • Qty: {item.quantity}</p>
+                      <p className="text-zinc-500 text-[11px]">
+                        {itemWeight} • Qty: {item.quantity}
+                        {item.product.gstEnabled === false ? ' (GST Exempt)' : item.product.gstRate !== undefined && item.product.gstRate !== 5 ? ` (GST ${item.product.gstRate}%)` : ''}
+                      </p>
                     </div>
-                    <span className="font-bold text-[#F4B400]">₹{itemPrice * item.quantity}</span>
+                    <span className="font-bold text-[#F4B400]">₹{lineTotal}</span>
                   </div>
                 );
               })}
@@ -461,17 +521,17 @@ export const CheckoutPage: React.FC = () => {
             <div className="border-t border-zinc-800 pt-3 space-y-2 text-xs text-zinc-300">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span className="font-semibold text-white">₹{subtotal}</span>
+                <span className="font-semibold text-white">₹{formatAmount(subtotal)}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-400 font-semibold">
                   <span>Coupon Discount:</span>
-                  <span>-₹{discountAmount}</span>
+                  <span>-₹{formatAmount(discountAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span>GST (5%):</span>
-                <span>₹{gstAmount}</span>
+                <span>GST {gstRatesSummary ? `(${gstRatesSummary})` : '(5%)'}:</span>
+                <span>₹{formatAmount(gstAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Shipping:</span>
@@ -479,13 +539,13 @@ export const CheckoutPage: React.FC = () => {
               </div>
               <div className="border-t border-zinc-800 pt-2 flex justify-between text-base font-black text-white">
                 <span>Total Amount:</span>
-                <span className="text-[#F4B400]">₹{grandTotal}</span>
+                <span className="text-[#F4B400]">₹{formatAmount(grandTotal)}</span>
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={isProcessing}
+              disabled={isProcessing || !allowedPayments.isCompatible}
               className="w-full bg-gradient-to-r from-[#F4B400] to-[#FF8C00] text-[#111111] font-black text-base py-4 rounded-2xl hover:scale-[1.02] transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessing ? (
@@ -498,7 +558,7 @@ export const CheckoutPage: React.FC = () => {
                   <Lock className="w-4 h-4" />
                   <span>
                     {paymentMethod === 'razorpay' || paymentMethod === 'upi'
-                      ? (language === 'mr' ? `Razorpay द्वारे ₹${grandTotal} द्या` : `Pay ₹${grandTotal} via Razorpay`)
+                      ? (language === 'mr' ? `Razorpay द्वारे ₹${formatAmount(grandTotal)} द्या` : `Pay ₹${formatAmount(grandTotal)} via Razorpay`)
                       : (language === 'mr' ? 'ऑर्डर निश्चित करा (COD)' : 'Confirm & Place COD Order')}
                   </span>
                 </>

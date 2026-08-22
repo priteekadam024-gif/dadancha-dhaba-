@@ -101,6 +101,9 @@ export interface Product {
   isBestSeller?: boolean;
   isSpecialMasala?: boolean;
   isKitchenAppliance?: boolean;
+  paymentMethods?: string[];
+  gstEnabled?: boolean;
+  gstRate?: number;
   createdAt: string;
 }
 

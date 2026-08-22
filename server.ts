@@ -444,11 +444,11 @@ async function startServer() {
 
       let subtotal = 0;
       let validatedItems: any[] = [];
+      const productsMap = new Map<string, any>();
 
       if (Array.isArray(items) && items.length > 0) {
         // Fetch trusted database products
         const { data: dbProducts } = await supabase.from('products').select('*');
-        const productsMap = new Map<string, any>();
         if (Array.isArray(dbProducts)) {
           dbProducts.forEach((p) => productsMap.set(p.id, p));
         }
@@ -525,8 +525,26 @@ async function startServer() {
       }
 
       const shippingFee = subtotal > 499 || validatedItems.length === 0 ? 0 : 50;
-      const gstAmount = 0;
-      let grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+      const discountRatio = subtotal > 0 ? Math.max(0, 1 - discountAmount / subtotal) : 1;
+
+      // Calculate GST using per-product tax settings (sum of item line tax)
+      let rawGstSum = 0;
+      if (validatedItems.length > 0) {
+        for (const it of validatedItems) {
+          const dbP = productsMap.get(String(it.productId));
+          const isGstEnabled = dbP ? (dbP.gst_enabled !== false && dbP.gstEnabled !== false) : true;
+          const gstRate = isGstEnabled ? (Number(dbP?.gst_rate ?? dbP?.gstRate ?? 5)) : 0;
+          const itemTaxable = (it.lineTotal || 0) * discountRatio;
+          rawGstSum += (itemTaxable * gstRate) / 100;
+        }
+      } else {
+        const taxableBase = Math.max(0, subtotal - discountAmount);
+        rawGstSum = (taxableBase * 5) / 100;
+      }
+
+      const gstAmount = Math.round((rawGstSum + Number.EPSILON) * 100) / 100;
+      const taxableBase = Math.max(0, subtotal - discountAmount);
+      let grandTotal = Math.round((Math.max(0, taxableBase + shippingFee + gstAmount) + Number.EPSILON) * 100) / 100;
 
       // Fallback for direct amount if specified and items not provided
       if (grandTotal === 0 && directAmount && Number(directAmount) > 0) {
@@ -1397,9 +1415,39 @@ async function startServer() {
     }
   });
 
+  // Helper to validate and sanitize product payment methods and GST fields
+  const sanitizeProductPayload = (raw: any) => {
+    const p = { ...raw };
+
+    // Sanitize payment methods
+    const ALLOWED_PAYMENTS = ['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay'];
+    let rawMethods = p.payment_methods || p.paymentMethods;
+    if (typeof rawMethods === 'string') {
+      try {
+        rawMethods = JSON.parse(rawMethods);
+      } catch {
+        rawMethods = rawMethods.split(',').map((s: string) => s.trim());
+      }
+    }
+    if (Array.isArray(rawMethods) && rawMethods.length > 0) {
+      const validMethods = rawMethods.filter((m: any) => typeof m === 'string' && ALLOWED_PAYMENTS.includes(m.trim().toLowerCase()));
+      p.payment_methods = validMethods.length > 0 ? validMethods : ALLOWED_PAYMENTS;
+    } else {
+      p.payment_methods = ALLOWED_PAYMENTS;
+    }
+
+    // Sanitize GST fields
+    const isGstEnabled = p.gst_enabled !== undefined ? Boolean(p.gst_enabled) : p.gstEnabled !== undefined ? Boolean(p.gstEnabled) : true;
+    p.gst_enabled = isGstEnabled;
+    const rawRate = Number(p.gst_rate !== undefined ? p.gst_rate : p.gstRate !== undefined ? p.gstRate : 5);
+    p.gst_rate = isGstEnabled ? (isNaN(rawRate) || rawRate < 0 ? 5 : Math.min(100, Math.max(0, rawRate))) : 0;
+
+    return p;
+  };
+
   app.post('/api/admin/products', requireAdminAuth, async (req, res) => {
     try {
-      const productPayload = { ...req.body };
+      let productPayload = sanitizeProductPayload(req.body);
       if (!productPayload || (!productPayload.name_en && !productPayload.nameEn && !productPayload.name)) {
         return res.status(400).json({ success: false, error: 'Product name (English) is required' });
       }
@@ -1434,7 +1482,7 @@ async function startServer() {
 
   app.post('/api/products', requireAdminAuth, async (req, res) => {
     try {
-      const productPayload = { ...req.body };
+      let productPayload = sanitizeProductPayload(req.body);
       if (!productPayload.id) {
         productPayload.id = 'p-' + Date.now();
       }
@@ -1467,7 +1515,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Product ID is required' });
       }
       const cleanId = id.trim();
-      const productPayload = { ...req.body, id: cleanId, updated_at: new Date().toISOString() };
+      let productPayload = sanitizeProductPayload({ ...req.body, id: cleanId, updated_at: new Date().toISOString() });
 
       if (productPayload.variants && typeof productPayload.variants === 'string') {
         try {

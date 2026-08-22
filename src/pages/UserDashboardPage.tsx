@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { InvoiceModal } from '../components/InvoiceModal';
 import { OfficialLogo } from '../components/OfficialLogo';
+import { formatAmount } from '../utils/cartCalculations';
 import { 
   User as UserIcon, Package, MapPin, Heart, ShoppingBag, Settings, LogOut, 
   Printer, Plus, ShieldCheck, CheckCircle2, Edit3, Trash2, KeyRound, 
@@ -484,7 +485,7 @@ export const UserDashboardPage: React.FC = () => {
                       }`}>
                         {ord.orderStatus}
                       </span>
-                      <span className="text-sm font-black text-white block mt-1">₹{ord.totalAmount}</span>
+                      <span className="text-sm font-black text-white block mt-1">₹{formatAmount(ord.totalAmount)}</span>
                     </div>
                   </div>
 

@@ -63,6 +63,7 @@ import {
   mapDbRecipeCategoryToFrontend
 } from '../utils/mappers';
 import { getCategoryProductCount } from '../utils/categoryUtils';
+import { calculateOrderTotals, getCartItemUnitPrice, getCartItemLineTotal } from '../utils/cartCalculations';
 
 interface Toast {
   id: string;
@@ -1416,10 +1417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    const subtotal = cart.reduce((acc, item) => {
-      const price = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
-      return acc + price * item.quantity;
-    }, 0);
+    const { subtotal } = calculateOrderTotals(cart);
 
     if (subtotal < coupon.minOrderValue) {
       return {
@@ -1441,22 +1439,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createOrder = (paymentMethod: Order['paymentMethod'], shippingAddress: Address): Order => {
-    const subtotal = cart.reduce((acc, item) => {
-      const price = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
-      return acc + price * item.quantity;
-    }, 0);
-
-    let discountAmount = 0;
-    if (appliedCoupon) {
-      if (appliedCoupon.discountType === 'percentage') {
-        discountAmount = Math.round((subtotal * appliedCoupon.value) / 100);
-      } else {
-        discountAmount = appliedCoupon.value;
-      }
-    }
-    const shippingFee = subtotal > 499 || cart.length === 0 ? 0 : 50;
-    const gstAmount = 0; // Tax included in subtotal
-    const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+    const {
+      subtotal,
+      discountAmount,
+      shippingFee,
+      gstAmount,
+      grandTotal: totalAmount,
+    } = calculateOrderTotals(cart, appliedCoupon);
 
     const newOrder: Order = {
       id: 'ord-' + Date.now(),
@@ -1468,9 +1457,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userPhone: shippingAddress.phone || currentUser?.phone || '',
       shippingAddress,
       items: cart.map((item) => {
-        const itemPrice = item.selectedVariant ? item.selectedVariant.price : (item.unitPrice || item.product.price);
+        const itemPrice = getCartItemUnitPrice(item);
         const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250g');
         const sizeLabel = item.selectedVariant ? ` (${item.selectedVariant.weight || item.selectedVariant.size})` : '';
+        const lineTotal = getCartItemLineTotal(item);
         return {
           productId: item.product.id,
           productNameEn: item.product.nameEn + sizeLabel,
@@ -1483,7 +1473,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           selectedVariantId: item.selectedVariant?.id,
           selectedVariantSize: itemWeight,
           unitPrice: itemPrice,
-          lineTotal: itemPrice * item.quantity,
+          lineTotal,
         };
       }),
       subtotal,

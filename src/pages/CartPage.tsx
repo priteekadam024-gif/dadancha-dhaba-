@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Trash2, ShoppingBag, ArrowRight, Tag, ShieldCheck, Check, Truck } from 'lucide-react';
+import { calculateOrderTotals, getCartItemUnitPrice, formatAmount } from '../utils/cartCalculations';
 
 export const CartPage: React.FC = () => {
   const { 
@@ -11,20 +12,13 @@ export const CartPage: React.FC = () => {
 
   const [couponInput, setCouponInput] = useState('');
 
-  const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
-  
-  let discountAmount = 0;
-  if (appliedCoupon) {
-    if (appliedCoupon.discountType === 'percentage') {
-      discountAmount = Math.round((subtotal * appliedCoupon.value) / 100);
-    } else {
-      discountAmount = appliedCoupon.value;
-    }
-  }
-
-  const shippingFee = subtotal > 499 || cart.length === 0 ? 0 : 50;
-  const gstAmount = Math.round(((subtotal - discountAmount) * 0.05));
-  const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee + gstAmount);
+  const {
+    subtotal,
+    discountAmount,
+    shippingFee,
+    gstAmount,
+    grandTotal,
+  } = calculateOrderTotals(cart, appliedCoupon);
 
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +75,7 @@ export const CartPage: React.FC = () => {
         {/* Cart Item List */}
         <div className="lg:col-span-8 space-y-4">
           {cart.map((item) => {
-            const itemPrice = item.selectedVariant ? Number(item.selectedVariant.price) : (item.unitPrice || item.product.price);
+            const itemPrice = getCartItemUnitPrice(item);
             const itemWeight = item.selectedVariant ? (item.selectedVariant.weight || item.selectedVariant.size) : (item.selectedWeight || item.product.weight || '250 g');
             const itemOriginalPrice = item.selectedVariant?.originalPrice || item.product.originalPrice;
             const stableCartItemId = item.id || `cart_item_${item.product.id}_${item.selectedVariant?.id || item.selectedWeight || 'default'}`;
@@ -204,19 +198,19 @@ export const CartPage: React.FC = () => {
             <div className="space-y-2 text-xs text-zinc-300">
               <div className="flex justify-between">
                 <span>{language === 'mr' ? 'उप-एकूण (Subtotal):' : 'Item Subtotal:'}</span>
-                <span className="font-semibold text-white">₹{subtotal}</span>
+                <span className="font-semibold text-white">₹{formatAmount(subtotal)}</span>
               </div>
 
               {discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-400 font-semibold">
                   <span>{language === 'mr' ? 'कूपन सूट:' : 'Coupon Discount:'}</span>
-                  <span>-₹{discountAmount}</span>
+                  <span>-₹{formatAmount(discountAmount)}</span>
                 </div>
               )}
 
               <div className="flex justify-between">
-                <span>{language === 'mr' ? 'जीएसटी (5% included):' : 'GST (5% Included):'}</span>
-                <span>₹{gstAmount}</span>
+                <span>{language === 'mr' ? 'जीएसटी (5%):' : 'GST (5%):'}</span>
+                <span>₹{formatAmount(gstAmount)}</span>
               </div>
 
               <div className="flex justify-between">
@@ -228,7 +222,7 @@ export const CartPage: React.FC = () => {
 
               <div className="border-t border-zinc-800 pt-3 flex justify-between text-base font-black text-white">
                 <span>{language === 'mr' ? 'एकूण रक्कम:' : 'Grand Total:'}</span>
-                <span className="text-[#F4B400]">₹{grandTotal}</span>
+                <span className="text-[#F4B400]">₹{formatAmount(grandTotal)}</span>
               </div>
             </div>
 

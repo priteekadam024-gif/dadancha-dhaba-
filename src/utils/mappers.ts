@@ -53,6 +53,23 @@ export function mapDbProductToFrontend(row: any): Product {
   const nameMr = (row.name_mr || row.marathi_name || row.nameMr || row.title_mr || nameEn).trim();
   const rawStock = row.stock_quantity !== undefined ? Number(row.stock_quantity) : (row.stock !== undefined ? Number(row.stock) : (row.in_stock ? 50 : 0));
 
+  let paymentMethodsArr: string[] = ['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay'];
+  if (Array.isArray(row.payment_methods)) {
+    paymentMethodsArr = row.payment_methods;
+  } else if (typeof row.payment_methods === 'string') {
+    try {
+      const parsed = JSON.parse(row.payment_methods);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        paymentMethodsArr = parsed;
+      }
+    } catch {}
+  } else if (Array.isArray(row.paymentMethods)) {
+    paymentMethodsArr = row.paymentMethods;
+  }
+
+  const gstEnabled = row.gst_enabled !== undefined ? Boolean(row.gst_enabled) : (row.gstEnabled !== undefined ? Boolean(row.gstEnabled) : true);
+  const gstRate = row.gst_rate !== undefined ? Number(row.gst_rate) : (row.gstRate !== undefined ? Number(row.gstRate) : 5);
+
   return {
     id: String(row.id),
     nameEn: nameEn,
@@ -80,6 +97,9 @@ export function mapDbProductToFrontend(row: any): Product {
     isBestSeller: Boolean(row.is_bestseller || row.isBestSeller),
     isSpecialMasala: Boolean(row.is_special_masala || row.isSpecialMasala),
     isKitchenAppliance: Boolean(row.is_kitchen_appliance || row.isKitchenAppliance),
+    paymentMethods: paymentMethodsArr,
+    gstEnabled: gstEnabled,
+    gstRate: isNaN(gstRate) ? 5 : gstRate,
     createdAt: row.created_at ? String(row.created_at).split('T')[0] : new Date().toISOString().split('T')[0],
   };
 }
@@ -116,6 +136,9 @@ export function mapFrontendProductToDb(p: Product): any {
     is_bestseller: p.isBestSeller,
     is_special_masala: p.isSpecialMasala,
     is_kitchen_appliance: p.isKitchenAppliance,
+    payment_methods: p.paymentMethods || ['cod', 'bhim_upi', 'google_pay', 'phonepe', 'razorpay'],
+    gst_enabled: p.gstEnabled !== undefined ? p.gstEnabled : true,
+    gst_rate: p.gstRate !== undefined ? Number(p.gstRate) : 5,
     updated_at: new Date().toISOString(),
   };
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { Order } from '../types';
 import { useApp } from '../context/AppContext';
 import { DhabaLogo } from './DhabaLogo';
+import { formatAmount } from '../utils/cartCalculations';
 import { Printer, X, Download, CheckCircle } from 'lucide-react';
 
 interface InvoiceModalProps {
@@ -126,17 +127,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
             <div className="w-full sm:w-64 space-y-2 text-xs">
               <div className="flex justify-between text-zinc-600">
                 <span>Subtotal:</span>
-                <span className="font-semibold text-zinc-900">₹{order.subtotal}</span>
+                <span className="font-semibold text-zinc-900">₹{formatAmount(order.subtotal)}</span>
               </div>
               {order.discountAmount > 0 && (
                 <div className="flex justify-between text-emerald-600 font-semibold">
                   <span>Discount ({order.couponCode}):</span>
-                  <span>-₹{order.discountAmount}</span>
+                  <span>-₹{formatAmount(order.discountAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-zinc-600">
-                <span>GST (5% Included):</span>
-                <span>₹{order.gstAmount}</span>
+                <span>GST (5%):</span>
+                <span>₹{formatAmount(order.gstAmount)}</span>
               </div>
               <div className="flex justify-between text-zinc-600">
                 <span>Shipping Charges:</span>
@@ -144,7 +145,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
               </div>
               <div className="flex justify-between text-base font-extrabold text-zinc-900 pt-2 border-t border-zinc-800">
                 <span>Grand Total:</span>
-                <span className="text-[#111111]">₹{order.totalAmount}</span>
+                <span className="text-[#111111]">₹{formatAmount(order.totalAmount)}</span>
               </div>
             </div>
           </div>
