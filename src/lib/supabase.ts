@@ -1687,6 +1687,8 @@ export async function supabaseDeleteRecipeCategory(id: string) {
  * ============================================================================
  */
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Fetch cart items from Supabase 'cart_items' table for an authenticated user
  */
@@ -1714,7 +1716,7 @@ export async function supabaseGetCartItems(userId: string): Promise<any[]> {
  * Upsert/Save a cart item row in 'cart_items' table
  */
 export async function supabaseSaveCartItem(item: {
-  id: string;
+  id?: string | null;
   userId: string;
   productId: string;
   quantity: number;
@@ -1724,27 +1726,92 @@ export async function supabaseSaveCartItem(item: {
 }) {
   if (!supabase || !item.userId || !item.productId) return { success: false, error: new Error('User and product required') };
 
+  const isUUID = Boolean(item.id && UUID_REGEX.test(item.id));
+  const effectivePrice = Number(item.unitPrice) || 0;
+
   try {
-    const payload = {
-      id: item.id,
+    // 1. If valid UUID primary key was given, try updating it directly
+    if (isUUID && item.id) {
+      const { data: updateData, error: updateErr } = await supabase
+        .from('cart_items')
+        .update({
+          quantity: item.quantity,
+          variant_id: item.variantId || null,
+          selected_weight: item.selectedWeight || null,
+          unit_price: effectivePrice,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', item.id)
+        .eq('user_id', item.userId)
+        .select()
+        .maybeSingle();
+
+      if (!updateErr && updateData) {
+        return { success: true, data: updateData, error: null };
+      }
+    }
+
+    // 2. Check if a row exists matching user_id + product_id (+ selected_weight)
+    let checkQuery = supabase
+      .from('cart_items')
+      .select('*')
+      .eq('user_id', item.userId)
+      .eq('product_id', item.productId);
+
+    if (item.selectedWeight) {
+      checkQuery = checkQuery.eq('selected_weight', item.selectedWeight);
+    }
+
+    const { data: existingRows } = await checkQuery.limit(1);
+
+    if (existingRows && existingRows.length > 0) {
+      const existingId = existingRows[0].id;
+      const { data: updatedData, error: updatedErr } = await supabase
+        .from('cart_items')
+        .update({
+          quantity: item.quantity,
+          variant_id: item.variantId || null,
+          selected_weight: item.selectedWeight || null,
+          unit_price: effectivePrice,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingId)
+        .select()
+        .single();
+
+      if (updatedErr) {
+        console.warn('Supabase update cart item error:', updatedErr.message);
+        return { success: false, error: updatedErr };
+      }
+      return { success: true, data: updatedData, error: null };
+    }
+
+    // 3. Otherwise insert a new row
+    const payload: any = {
       user_id: item.userId,
       product_id: item.productId,
       quantity: item.quantity,
       variant_id: item.variantId || null,
       selected_weight: item.selectedWeight || null,
-      unit_price: item.unitPrice || null,
+      unit_price: effectivePrice,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('cart_items')
-      .upsert([payload], { onConflict: 'id' });
-
-    if (error) {
-      console.warn('Supabase save cart item error:', error.message);
-      return { success: false, error };
+    if (isUUID && item.id) {
+      payload.id = item.id;
     }
-    return { success: true, data, error: null };
+
+    const { data: insertedData, error: insertErr } = await supabase
+      .from('cart_items')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.warn('Supabase insert cart item error:', insertErr.message);
+      return { success: false, error: insertErr };
+    }
+    return { success: true, data: insertedData, error: null };
   } catch (err: any) {
     console.warn('Supabase save cart item exception:', err);
     return { success: false, error: err };
@@ -1752,25 +1819,63 @@ export async function supabaseSaveCartItem(item: {
 }
 
 /**
- * Delete a specific cart item row from 'cart_items' table by unique cart-item ID
+ * Delete a specific cart item row from 'cart_items' table by unique cart-item ID or product info
  */
-export async function supabaseDeleteCartItem(cartItemId: string, userId?: string) {
+export async function supabaseDeleteCartItem(
+  cartItemId: string,
+  userId?: string,
+  extraParams?: { productId?: string; selectedWeight?: string | null; variantId?: string | null }
+) {
   if (!supabase || !cartItemId) return { success: true, error: null };
 
-  try {
-    let query = supabase.from('cart_items').delete().eq('id', cartItemId);
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-    const { error } = await query;
+  const isUUID = UUID_REGEX.test(cartItemId);
 
-    if (error) {
-      console.error('Supabase delete cart item error:', error.message);
-      return { success: false, error };
+  try {
+    let deleteResult: any = null;
+
+    if (isUUID) {
+      // 1. If valid UUID primary key, delete directly by id
+      let query = supabase.from('cart_items').delete().eq('id', cartItemId);
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      deleteResult = await query;
+    } else {
+      // 2. If not a raw UUID, cartItemId might be composite 'cart_item_${productId}_${weight}' or raw productId
+      let parsedProductId = extraParams?.productId;
+      let parsedWeight = extraParams?.selectedWeight;
+
+      if (!parsedProductId) {
+        if (cartItemId.startsWith('cart_item_')) {
+          const parts = cartItemId.replace('cart_item_', '').split('_');
+          parsedProductId = parts[0];
+          if (parts[1] && parts[1] !== 'default') {
+            parsedWeight = parsedWeight || parts[1];
+          }
+        } else {
+          parsedProductId = cartItemId;
+        }
+      }
+
+      if (userId && parsedProductId) {
+        let query = supabase.from('cart_items').delete().eq('user_id', userId).eq('product_id', parsedProductId);
+        if (parsedWeight) {
+          query = query.eq('selected_weight', parsedWeight);
+        }
+        deleteResult = await query;
+      }
     }
+
+    if (deleteResult?.error) {
+      console.error('CART DELETE ERROR:', deleteResult.error);
+      console.error('CART ITEM BEING REMOVED:', { cartItemId, userId, isUUID, extraParams });
+      return { success: false, error: deleteResult.error };
+    }
+
     return { success: true, error: null };
   } catch (err: any) {
-    console.error('Supabase delete cart item exception:', err);
+    console.error('CART DELETE ERROR:', err);
+    console.error('CART ITEM BEING REMOVED:', { cartItemId, userId, isUUID, extraParams });
     return { success: false, error: err };
   }
 }

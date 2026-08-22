@@ -673,16 +673,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const weight = dbRow.selected_weight || prod.weight;
                 const v = prod.variants?.find((va) => va.id === varId);
                 const price = Number(dbRow.unit_price) || (v ? Number(v.price) : prod.price);
-                const k = dbRow.id || `cart_item_${dbRow.product_id}_${varId || weight || 'default'}`;
-                const existing = map.get(k);
-                map.set(k, {
-                  id: k,
+                const logicalKey = `cart_item_${dbRow.product_id}_${varId || weight || 'default'}`;
+                const existing = map.get(logicalKey) || (dbRow.id ? map.get(dbRow.id) : undefined);
+                
+                const itemObj: CartItem = {
+                  id: dbRow.id || logicalKey,
                   product: prod,
                   quantity: existing ? Math.max(existing.quantity, Number(dbRow.quantity) || 1) : (Number(dbRow.quantity) || 1),
                   selectedVariant: v || existing?.selectedVariant,
                   selectedWeight: weight,
                   unitPrice: price,
-                });
+                };
+                map.set(dbRow.id || logicalKey, itemObj);
               }
             });
             const merged = Array.from(map.values());
@@ -1241,13 +1243,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (currentUser?.id && isSupabaseConfigured && supabase) {
       supabaseSaveCartItem({
-        id: uniqueCartItemId,
         userId: currentUser.id,
         productId: product.id,
         quantity: quantity,
         variantId: variantKey,
         selectedWeight: effectiveWeight,
         unitPrice: effectivePrice,
+      }).then((res) => {
+        if (res.success && res.data?.id) {
+          setCart((curr) => {
+            const mapped = curr.map((c) => {
+              const itemVariantKey = c.selectedVariant?.id || c.selectedVariant?.weight || c.selectedVariant?.size || c.selectedVariant?.sku || null;
+              if (c.product.id === product.id && (itemVariantKey === variantKey || c.selectedWeight === effectiveWeight)) {
+                return { ...c, id: res.data.id };
+              }
+              return c;
+            });
+            try { localStorage.setItem('dd_shopping_cart', JSON.stringify(mapped)); } catch (e) {}
+            return mapped;
+          });
+        }
       }).catch((err) => console.warn('Supabase cart sync notice:', err));
     }
     
@@ -1261,39 +1276,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const removeFromCart = async (identifier: string, variantId?: string) => {
     // 1. Locate the exact item to delete
-    let targetCartItemId: string | null = null;
-    const existingById = cart.find((item) => item.id && item.id === identifier);
-    if (existingById) {
-      targetCartItemId = existingById.id || null;
-    } else {
-      const existingByProd = cart.find((item) => {
-        if (item.product.id !== identifier) return false;
+    const itemToRemove = cart.find((item) => {
+      if (item.id && item.id === identifier) return true;
+      if (item.product.id === identifier) {
         if (variantId) {
           const itemVarId = item.selectedVariant?.id || item.selectedVariant?.weight || item.selectedVariant?.size || item.selectedWeight;
           return itemVarId === variantId;
         }
         return true;
-      });
-      if (existingByProd) {
-        targetCartItemId = existingByProd.id || `cart_item_${existingByProd.product.id}_${variantId || existingByProd.selectedWeight || 'default'}`;
       }
-    }
+      return false;
+    });
+
+    console.log("CART ITEM BEING REMOVED:", itemToRemove || { identifier, variantId });
 
     // 2. If authenticated, remove from Supabase cart_items table
-    if (currentUser?.id && isSupabaseConfigured && supabase && targetCartItemId) {
-      const deleteRes = await supabaseDeleteCartItem(targetCartItemId, currentUser.id);
+    if (currentUser?.id && isSupabaseConfigured && supabase) {
+      const deleteRes = await supabaseDeleteCartItem(
+        itemToRemove?.id || identifier,
+        currentUser.id,
+        {
+          productId: itemToRemove?.product.id || (identifier.startsWith('cart_item_') ? undefined : identifier),
+          selectedWeight: itemToRemove?.selectedWeight,
+          variantId: itemToRemove?.selectedVariant?.id,
+        }
+      );
+
       if (!deleteRes.success && deleteRes.error) {
-        console.error('Failed to remove cart item from Supabase:', deleteRes.error);
-        showToast(language === 'mr' ? 'कार्टमधून वस्तू काढताना त्रुटी आली' : 'Failed to remove item from cart', 'error');
-        return;
+        console.error("CART DELETE ERROR:", deleteRes.error);
       }
     }
 
     // 3. Immediately update React state with pure immutable filter
     setCart((prev) => {
       const updated = prev.filter((item) => {
-        if (targetCartItemId && item.id === targetCartItemId) return false;
-        if (item.id === identifier) return false;
+        if (itemToRemove && item === itemToRemove) return false;
+        if (item.id && (item.id === identifier || (itemToRemove?.id && item.id === itemToRemove.id))) return false;
         if (item.product.id === identifier) {
           if (variantId) {
             const itemVarId = item.selectedVariant?.id || item.selectedVariant?.weight || item.selectedVariant?.size || item.selectedWeight;
@@ -1313,7 +1331,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    // 4. Show success toast only after successful removal
+    // 4. Show success toast
     showToast(language === 'mr' ? 'वस्तू कार्टमधून काढली' : 'Item removed from cart', 'info');
   };
 
@@ -1330,13 +1348,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const updatedItem = { ...item, quantity };
           if (currentUser?.id && isSupabaseConfigured && supabase) {
             supabaseSaveCartItem({
-              id: updatedItem.id || `cart_item_${item.product.id}_${itemVarId || 'default'}`,
+              id: item.id,
               userId: currentUser.id,
               productId: item.product.id,
               quantity,
               variantId: item.selectedVariant?.id || null,
               selectedWeight: item.selectedWeight || null,
               unitPrice: item.unitPrice || item.product.price,
+            }).then((res) => {
+              if (res.success && res.data?.id && res.data.id !== item.id) {
+                setCart((curr) => {
+                  const mapped = curr.map((c) => (c === item ? { ...c, id: res.data.id } : c));
+                  try { localStorage.setItem('dd_shopping_cart', JSON.stringify(mapped)); } catch (e) {}
+                  return mapped;
+                });
+              }
             }).catch((err) => console.warn('Supabase cart update notice:', err));
           }
           return updatedItem;
